@@ -1,0 +1,93 @@
+import AppKit
+import Foundation
+
+@MainActor
+final class ClipboardMonitor {
+    private weak var appState: AppState?
+    private var timer: Timer?
+    private var lastChangeCount: Int
+
+    init(appState: AppState) {
+        self.appState = appState
+        self.lastChangeCount = NSPasteboard.general.changeCount
+        start()
+    }
+
+    func start() {
+        stop()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.checkClipboard()
+            }
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func checkClipboard() {
+        guard let appState, appState.isMonitoring else { return }
+
+        let pasteboard = NSPasteboard.general
+        let currentCount = pasteboard.changeCount
+
+        guard currentCount != lastChangeCount else { return }
+        lastChangeCount = currentCount
+
+        // Feedback loop prevention: skip if this change was caused by us
+        if let writtenCount = appState.lastWrittenChangeCount, writtenCount == currentCount {
+            appState.lastWrittenChangeCount = nil
+            return
+        }
+
+        // Try to read image first (higher fidelity check)
+        if let imageData = readImage(from: pasteboard),
+           let path = saveImageToTemp(imageData) {
+            let item = ClipboardItem(contentType: .image, imagePath: path)
+            appState.stack.add(item)
+            return
+        }
+
+        // Try to read text
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            let contentType = ContentClassifier.classify(text: text)
+            let truncatedText = truncateIfNeeded(text)
+            let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
+            appState.stack.add(item)
+        }
+    }
+
+    private func readImage(from pasteboard: NSPasteboard) -> Data? {
+        let imageTypes: [NSPasteboard.PasteboardType] = [.tiff, .png]
+        for type in imageTypes {
+            if let data = pasteboard.data(forType: type) {
+                return data
+            }
+        }
+        return nil
+    }
+
+    /// Save image data to a temp file and return the path.
+    private func saveImageToTemp(_ data: Data) -> String? {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("relay-images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let filename = UUID().uuidString + ".png"
+        let fileURL = dir.appendingPathComponent(filename)
+        do {
+            try data.write(to: fileURL)
+            return fileURL.path
+        } catch {
+            return nil
+        }
+    }
+
+    /// Truncate text items larger than 10KB
+    private func truncateIfNeeded(_ text: String) -> String {
+        let maxSize = 10_240
+        guard text.utf8.count > maxSize else { return text }
+        let truncated = String(text.prefix(maxSize))
+        return truncated + "\n[truncated]"
+    }
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Relay uses speech recognition to transcribe voice notes that are added to your prompt context.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Relay uses the microphone to record voice notes for transcription.</string>
+</dict>
+</plist>
