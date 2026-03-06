@@ -10,7 +10,6 @@ final class ClipboardMonitor {
     init(appState: AppState) {
         self.appState = appState
         self.lastChangeCount = NSPasteboard.general.changeCount
-        start()
     }
 
     func start() {
@@ -25,6 +24,34 @@ final class ClipboardMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+    }
+
+    /// Grab current pasteboard content immediately, skipping the change-count guard.
+    func captureCurrentClipboard() {
+        guard let appState else { return }
+
+        let pasteboard = NSPasteboard.general
+        lastChangeCount = pasteboard.changeCount
+
+        if let imageData = readImage(from: pasteboard),
+           let path = saveImageToTemp(imageData) {
+            let item = ClipboardItem(contentType: .image, imagePath: path)
+            if !isDuplicateOfLastItem(item) {
+                appState.stack.add(item)
+                appState.notifyItemAdded()
+            }
+            return
+        }
+
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            let contentType = ContentClassifier.classify(text: text)
+            let truncatedText = truncateIfNeeded(text)
+            let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
+            if !isDuplicateOfLastItem(item) {
+                appState.stack.add(item)
+                appState.notifyItemAdded()
+            }
+        }
     }
 
     private func checkClipboard() {
@@ -46,7 +73,10 @@ final class ClipboardMonitor {
         if let imageData = readImage(from: pasteboard),
            let path = saveImageToTemp(imageData) {
             let item = ClipboardItem(contentType: .image, imagePath: path)
-            appState.stack.add(item)
+            if !isDuplicateOfLastItem(item) {
+                appState.stack.add(item)
+                appState.notifyItemAdded()
+            }
             return
         }
 
@@ -55,8 +85,32 @@ final class ClipboardMonitor {
             let contentType = ContentClassifier.classify(text: text)
             let truncatedText = truncateIfNeeded(text)
             let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
-            appState.stack.add(item)
+            if !isDuplicateOfLastItem(item) {
+                appState.stack.add(item)
+                appState.notifyItemAdded()
+            }
         }
+    }
+
+    /// Returns true if the new item's content matches the last item in the stack.
+    private func isDuplicateOfLastItem(_ item: ClipboardItem) -> Bool {
+        guard let last = appState?.stack.items.last else { return false }
+
+        // Compare text content
+        if let newText = item.textContent, let lastText = last.textContent {
+            return newText == lastText
+        }
+
+        // Compare image file data
+        if let newPath = item.imagePath, let lastPath = last.imagePath {
+            guard let newData = try? Data(contentsOf: URL(fileURLWithPath: newPath)),
+                  let lastData = try? Data(contentsOf: URL(fileURLWithPath: lastPath)) else {
+                return false
+            }
+            return newData == lastData
+        }
+
+        return false
     }
 
     private func readImage(from pasteboard: NSPasteboard) -> Data? {
