@@ -17,4 +17,7 @@ protocol SpeechEngine: AnyObject, Sendable {
 
     /// Stop recording and return the final transcription.
     func stopAndTranscribe() async throws -> String
+
+    /// Cancel recording without transcribing. Discards all captured audio.
+    func cancel() async
 }

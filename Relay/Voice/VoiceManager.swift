@@ -17,6 +17,7 @@ final class VoiceManager: ObservableObject {
     @Published var error: String?
 
     private nonisolated(unsafe) var activeEngine: any SpeechEngine
+    private var previousInputVolume: Float?
 
     init() {
         let type = SpeechEngineType.stored
@@ -78,6 +79,12 @@ final class VoiceManager: ObservableObject {
                 self.error = error.localizedDescription
                 self.isRecording = false
             }
+
+            // Max mic volume after engine starts (so it doesn't interfere with audio session setup)
+            if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil || UserDefaults.standard.bool(forKey: "maxMicOnRecord") {
+                self.previousInputVolume = SystemAudioHelper.getInputVolume()
+                SystemAudioHelper.setInputVolume(1.0)
+            }
         }
     }
 
@@ -88,15 +95,36 @@ final class VoiceManager: ObservableObject {
         Task {
             do {
                 let transcription = try await engine.stopAndTranscribe()
+                self.restoreInputVolume()
                 self.isRecording = false
                 self.partialTranscription = ""
                 if !transcription.isEmpty {
                     onComplete(transcription)
                 }
             } catch {
+                self.restoreInputVolume()
                 self.error = error.localizedDescription
                 self.isRecording = false
             }
+        }
+    }
+
+    func cancelRecording() {
+        guard isRecording else { return }
+
+        let engine = activeEngine
+        Task {
+            await engine.cancel()
+            self.restoreInputVolume()
+            self.isRecording = false
+            self.partialTranscription = ""
+        }
+    }
+
+    private func restoreInputVolume() {
+        if let volume = previousInputVolume {
+            SystemAudioHelper.setInputVolume(volume)
+            previousInputVolume = nil
         }
     }
 

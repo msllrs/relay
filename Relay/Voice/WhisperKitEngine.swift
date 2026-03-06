@@ -49,8 +49,7 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
-        let inputNode = engine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let recordingFormat = engine.validInputFormat()
 
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -60,7 +59,8 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         let audioFile = try AVAudioFile(forWriting: tempURL, settings: recordingFormat.settings)
         self.audioFile = audioFile
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+        // Pass nil format to let Core Audio negotiate correctly
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
             try? audioFile.write(from: buffer)
         }
 
@@ -84,7 +84,7 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
             throw SpeechEngineError.transcriptionFailed("No recording available")
         }
 
-        let results = try await whisperKit.transcribe(audioPath: tempURL.path)
+        let results: [TranscriptionResult] = try await whisperKit.transcribe(audioPath: tempURL.path)
         let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 
         try? FileManager.default.removeItem(at: tempURL)
@@ -94,5 +94,17 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         #else
         throw SpeechEngineError.engineUnavailable
         #endif
+    }
+
+    func cancel() async {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        audioFile = nil
+
+        if let tempURL = tempFileURL {
+            try? FileManager.default.removeItem(at: tempURL)
+            tempFileURL = nil
+        }
     }
 }

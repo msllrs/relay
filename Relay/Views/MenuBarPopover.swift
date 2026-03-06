@@ -2,7 +2,6 @@ import SwiftUI
 
 struct MenuBarPopover: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var voiceManager = VoiceManager()
     @State private var showSettings = false
 
     var body: some View {
@@ -37,7 +36,7 @@ struct MenuBarPopover: View {
             Divider()
 
             // Voice recording
-            VoiceNoteButton(voiceManager: voiceManager) { transcription in
+            VoiceNoteButton(voiceManager: appState.voiceManager) { transcription in
                 let item = ClipboardItem(contentType: .voiceNote, textContent: transcription)
                 appState.stack.add(item)
             }
@@ -46,7 +45,7 @@ struct MenuBarPopover: View {
 
             // Context stack or empty state
             if appState.stack.isEmpty {
-                EmptyStateView()
+                EmptyStateView(isMonitoring: appState.isMonitoring)
             } else {
                 ContextStackView(stack: appState.stack)
             }
@@ -55,7 +54,7 @@ struct MenuBarPopover: View {
 
             // Settings panel (collapsible)
             if showSettings {
-                SettingsSection(voiceManager: voiceManager)
+                SettingsSection(voiceManager: appState.voiceManager)
                 Divider()
             }
 
@@ -105,6 +104,7 @@ struct MenuBarPopover: View {
 // MARK: - Settings Section
 
 private struct SettingsSection: View {
+    @EnvironmentObject var appState: AppState
     @ObservedObject var voiceManager: VoiceManager
 
     var body: some View {
@@ -123,8 +123,17 @@ private struct SettingsSection: View {
             if voiceManager.currentEngineNeedsDownload {
                 HStack {
                     if voiceManager.isDownloading {
-                        ProgressView(value: voiceManager.downloadProgress)
-                            .frame(maxWidth: .infinity)
+                        VStack(alignment: .leading, spacing: 4) {
+                            ProgressView(value: voiceManager.downloadProgress)
+                                .frame(maxWidth: .infinity)
+                            Text(voiceManager.downloadProgress < 0.3
+                                 ? "Downloading models\u{2026}"
+                                 : voiceManager.downloadProgress < 0.9
+                                 ? "Compiling CoreML models (first run)\u{2026}"
+                                 : "Initializing\u{2026}")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                         Text("\(Int(voiceManager.downloadProgress * 100))%")
                             .font(.caption)
                             .monospacedDigit()
@@ -146,8 +155,104 @@ private struct SettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.green)
             }
+
+            Divider()
+
+            Toggle("Always-on monitoring", isOn: $appState.alwaysOnMonitoring)
+                .font(.caption)
+
+            Toggle("Clear stack after copying", isOn: $appState.clearStackOnCopy)
+                .font(.caption)
+
+            Toggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
+                .font(.caption)
+
+            Toggle("Hotkey starts dictation", isOn: $appState.hotkeyStartsDictation)
+                .font(.caption)
+
+            Divider()
+
+            HStack {
+                Text("Keyboard shortcut")
+                    .font(.caption)
+                Spacer()
+                ShortcutRecorderButton()
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Shortcut Recorder
+
+private struct ShortcutRecorderButton: View {
+    @EnvironmentObject var appState: AppState
+    @State private var isRecording = false
+    @State private var displayString = KeyboardShortcutModel.load().displayString
+
+    var body: some View {
+        Button(isRecording ? "Press shortcut..." : displayString) {
+            isRecording = true
+        }
+        .font(.caption.monospaced())
+        .controlSize(.small)
+        .background {
+            if isRecording {
+                ShortcutCaptureView { shortcut in
+                    appState.hotkeyManager?.updateShortcut(shortcut)
+                    displayString = shortcut.displayString
+                    isRecording = false
+                } onCancel: {
+                    isRecording = false
+                }
+            }
+        }
+    }
+}
+
+/// NSViewRepresentable that captures the next keyDown event with modifier flags.
+private struct ShortcutCaptureView: NSViewRepresentable {
+    let onCapture: (KeyboardShortcutModel) -> Void
+    let onCancel: () -> Void
+
+    func makeNSView(context: Context) -> ShortcutCaptureNSView {
+        let view = ShortcutCaptureNSView()
+        view.onCapture = onCapture
+        view.onCancel = onCancel
+        DispatchQueue.main.async {
+            view.window?.makeFirstResponder(view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: ShortcutCaptureNSView, context: Context) {}
+}
+
+private final class ShortcutCaptureNSView: NSView {
+    var onCapture: ((KeyboardShortcutModel) -> Void)?
+    var onCancel: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // Escape cancels
+        if event.keyCode == 53 {
+            onCancel?()
+            return
+        }
+
+        // Require at least one modifier
+        guard modifiers.contains(.command) || modifiers.contains(.control) || modifiers.contains(.option) else {
+            return
+        }
+
+        let shortcut = KeyboardShortcutModel(
+            keyCode: event.keyCode,
+            modifiers: modifiers.rawValue
+        )
+        onCapture?(shortcut)
     }
 }
