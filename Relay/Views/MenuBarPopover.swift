@@ -53,9 +53,10 @@ private struct MainPage: View {
         Divider()
 
         // Voice recording
-        VoiceNoteButton(voiceManager: appState.voiceManager) { transcription in
-            let item = ClipboardItem(contentType: .voiceNote, textContent: transcription)
-            appState.stack.add(item)
+        VoiceNoteButton(voiceManager: appState.voiceManager) {
+            appState.startVoiceNote()
+        } onTranscription: { transcription in
+            appState.finishVoiceNote(transcription: transcription)
         }
 
         Divider()
@@ -204,6 +205,19 @@ private struct SettingsPage: View {
 
                 Toggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
                     .font(.caption)
+
+                Divider()
+
+                Text("Prompt Format")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Format", selection: $appState.promptFormat) {
+                    ForEach(PromptFormat.allCases) { format in
+                        Text(format.label).tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
 
                 Divider()
 

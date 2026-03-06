@@ -4,7 +4,7 @@ import AppKit
 struct ClipboardItem: Identifiable, Equatable {
     let id: UUID
     let contentType: ContentType
-    let textContent: String?
+    var textContent: String?
     let imagePath: String?
     let timestamp: Date
 

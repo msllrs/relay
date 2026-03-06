@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VoiceNoteButton: View {
     @ObservedObject var voiceManager: VoiceManager
+    var onStart: () -> Void
     var onTranscription: (String) -> Void
     @State private var isPulsing = false
 
@@ -9,8 +10,13 @@ struct VoiceNoteButton: View {
         VStack(spacing: 4) {
             HStack {
                 Button {
-                    voiceManager.toggleRecording { transcription in
-                        onTranscription(transcription)
+                    if voiceManager.isRecording {
+                        voiceManager.stopRecording { transcription in
+                            onTranscription(transcription)
+                        }
+                    } else {
+                        onStart()
+                        voiceManager.startRecording()
                     }
                 } label: {
                     HStack(spacing: 6) {

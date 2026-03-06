@@ -18,6 +18,11 @@ final class ContextStack: ObservableObject {
         items.append(item)
     }
 
+    func update(id: UUID, textContent: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].textContent = textContent
+    }
+
     func remove(at offsets: IndexSet) {
         items.remove(atOffsets: offsets)
     }

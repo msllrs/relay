@@ -29,6 +29,9 @@ final class AppState: ObservableObject {
     @Published var captureClipboardOnStart: Bool {
         didSet { UserDefaults.standard.set(captureClipboardOnStart, forKey: "captureClipboardOnStart") }
     }
+    @Published var promptFormat: PromptFormat {
+        didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
+    }
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")
@@ -40,6 +43,9 @@ final class AppState: ObservableObject {
 
     /// Number of non-voiceNote items in the stack when a dictation session started (for clean dictation).
     private var clipboardItemCountAtSessionStart = 0
+
+    /// ID of the placeholder voice note added when recording starts.
+    private var activeVoiceNoteID: UUID?
 
     /// Tracks clipboard items that arrived during an active dictation session.
     private struct PendingRef {
@@ -73,6 +79,7 @@ final class AppState: ObservableObject {
         } else {
             self.maxMicOnRecord = UserDefaults.standard.bool(forKey: "maxMicOnRecord")
         }
+        self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .xml
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         self.selectedInputDeviceID = storedDeviceID
         if storedDeviceID != 0 {
@@ -141,6 +148,10 @@ final class AppState: ObservableObject {
             startMonitoring()
             clipboardItemCountAtSessionStart = stack.items.filter { $0.contentType != .voiceNote }.count
             pendingRefs = []
+            // Reserve a placeholder in the stack so the voice note keeps its position
+            let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
+            activeVoiceNoteID = placeholder.id
+            stack.add(placeholder)
             voiceManager.startRecording()
             // Install Esc monitor to cancel
             hotkeyManager?.startEscMonitor { [weak self] in
@@ -164,17 +175,26 @@ final class AppState: ObservableObject {
         let isPushToTalk = pushToTalk
         let refs = pendingRefs
         pendingRefs = []
+        let voiceNoteID = activeVoiceNoteID
+        activeVoiceNoteID = nil
         voiceManager.stopRecording { [weak self] transcription in
             guard let self else { return }
             // Clean dictation: if push-to-talk and no clipboard items were added during session,
             // copy raw transcription directly instead of adding to stack
             let currentClipboardCount = self.stack.items.filter { $0.contentType != .voiceNote }.count
             if isPushToTalk && self.cleanDictation && currentClipboardCount == itemCountBefore {
+                // Remove the placeholder since we're copying raw
+                if let id = voiceNoteID { self.stack.remove(id: id) }
                 self.copyRawTranscription(transcription)
+            } else if let id = voiceNoteID {
+                let markedText = self.insertRefMarkers(into: transcription, refs: refs)
+                self.stack.update(id: id, textContent: markedText)
+                self.autoCopyIfVoiceOnly()
             } else {
                 let markedText = self.insertRefMarkers(into: transcription, refs: refs)
                 let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
                 self.stack.add(item)
+                self.autoCopyIfVoiceOnly()
             }
         }
         stopMonitoring()
@@ -184,6 +204,10 @@ final class AppState: ObservableObject {
         hotkeyManager?.stopEscMonitor()
         hotkeyManager?.stopKeyUpMonitor()
         pendingRefs = []
+        if let id = activeVoiceNoteID {
+            stack.remove(id: id)
+            activeVoiceNoteID = nil
+        }
         voiceManager.cancelRecording()
         stopMonitoring()
     }
@@ -204,10 +228,20 @@ final class AppState: ObservableObject {
     private func insertRefMarkers(into text: String, refs: [PendingRef]) -> String {
         guard !refs.isEmpty else { return text }
 
+        // Build a map of non-voice-note indices (1-based)
+        var nonVoiceIndex = 0
+        var indexByID: [UUID: Int] = [:]
+        for item in stack.items {
+            if item.contentType != .voiceNote {
+                nonVoiceIndex += 1
+                indexByID[item.id] = nonVoiceIndex
+            }
+        }
+
         var markers: [(charOffset: Int, refText: String)] = []
         for ref in refs {
-            if let idx = stack.items.firstIndex(where: { $0.id == ref.itemID }) {
-                markers.append((ref.charOffset, " [ref:\(idx + 1)]"))
+            if let idx = indexByID[ref.itemID] {
+                markers.append((ref.charOffset, " [ref:\(idx)]"))
             }
         }
 
@@ -219,10 +253,66 @@ final class AppState: ObservableObject {
         var result = text
         for marker in markers {
             let clampedOffset = min(marker.charOffset, result.count)
-            let insertionIndex = result.index(result.startIndex, offsetBy: clampedOffset)
+            let insertionOffset = snapToWordBoundary(in: result, near: clampedOffset)
+            let insertionIndex = result.index(result.startIndex, offsetBy: insertionOffset)
             result.insert(contentsOf: marker.refText, at: insertionIndex)
         }
         return result
+    }
+
+    /// Snap a character offset to the nearest word boundary, preferring the end of the current word.
+    private func snapToWordBoundary(in text: String, near offset: Int) -> Int {
+        guard !text.isEmpty, offset > 0, offset < text.count else { return offset }
+
+        let index = text.index(text.startIndex, offsetBy: offset)
+
+        // If we're already at a space, we're at a boundary
+        if text[index] == " " { return offset }
+
+        // Scan forward to find the end of the current word
+        var end = index
+        while end < text.endIndex, text[end] != " " {
+            end = text.index(after: end)
+        }
+        return text.distance(from: text.startIndex, to: end)
+    }
+
+    /// Called by VoiceNoteButton when the user taps to start recording.
+    func startVoiceNote() {
+        let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
+        activeVoiceNoteID = placeholder.id
+        stack.add(placeholder)
+    }
+
+    /// Called by VoiceNoteButton when transcription completes.
+    func finishVoiceNote(transcription: String) {
+        if let id = activeVoiceNoteID {
+            stack.update(id: id, textContent: transcription)
+            activeVoiceNoteID = nil
+        } else {
+            let item = ClipboardItem(contentType: .voiceNote, textContent: transcription)
+            stack.add(item)
+        }
+        autoCopyIfVoiceOnly()
+    }
+
+    /// If the stack is just a single voice note with no task intent, auto-copy raw text to clipboard.
+    private func autoCopyIfVoiceOnly() {
+        let hasTask = !taskIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !hasTask,
+              stack.items.count == 1,
+              stack.items[0].contentType == .voiceNote,
+              let text = stack.items[0].textContent, !text.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        lastWrittenChangeCount = pasteboard.changeCount
+        stack.clear()
+        showCopiedConfirmation = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            showCopiedConfirmation = false
+        }
     }
 
     func notifyItemAdded() {
@@ -241,7 +331,13 @@ final class AppState: ObservableObject {
     }
 
     func copyPromptToClipboard() {
-        let prompt = PromptComposer.compose(task: taskIntent, items: stack.items)
+        // If the only item is a voice note with no task intent, just copy the raw text
+        let onlyVoiceNote = stack.items.count == 1
+            && stack.items[0].contentType == .voiceNote
+            && taskIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let prompt = onlyVoiceNote
+            ? (stack.items[0].textContent ?? "")
+            : PromptComposer.compose(task: taskIntent, items: stack.items, format: promptFormat)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(prompt, forType: .string)

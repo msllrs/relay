@@ -1,8 +1,30 @@
 import Foundation
 
+enum PromptFormat: String, CaseIterable, Identifiable {
+    case xml
+    case markdown
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .xml: "XML"
+        case .markdown: "Markdown"
+        }
+    }
+}
+
 enum PromptComposer {
-    /// Compose a structured XML prompt from the task intent and context stack items.
-    static func compose(task: String, items: [ClipboardItem]) -> String {
+    static func compose(task: String, items: [ClipboardItem], format: PromptFormat = .xml) -> String {
+        switch format {
+        case .xml: composeXML(task: task, items: items)
+        case .markdown: composeMarkdown(task: task, items: items)
+        }
+    }
+
+    // MARK: - XML
+
+    private static func composeXML(task: String, items: [ClipboardItem]) -> String {
         var parts: [String] = []
 
         let trimmedTask = task.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -12,15 +34,68 @@ enum PromptComposer {
 
         if !items.isEmpty {
             var contextParts: [String] = []
-            for (index, item) in items.enumerated() {
+            var nonVoiceIndex = 0
+            for item in items {
                 let content = contentString(for: item)
-                contextParts.append("<item type=\"\(item.contentType.xmlTag)\" index=\"\(index + 1)\">\n\(content)\n</item>")
+                if item.contentType == .voiceNote {
+                    contextParts.append("<item type=\"\(item.contentType.xmlTag)\">\n\(content)\n</item>")
+                } else {
+                    nonVoiceIndex += 1
+                    contextParts.append("<item type=\"\(item.contentType.xmlTag)\" index=\"\(nonVoiceIndex)\">\n\(content)\n</item>")
+                }
             }
             parts.append("<context>\n\(contextParts.joined(separator: "\n\n"))\n</context>")
         }
 
         return parts.joined(separator: "\n\n")
     }
+
+    // MARK: - Markdown
+
+    private static func composeMarkdown(task: String, items: [ClipboardItem]) -> String {
+        var parts: [String] = []
+
+        let trimmedTask = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTask.isEmpty {
+            parts.append("## Task\n\(trimmedTask)")
+        }
+
+        if !items.isEmpty {
+            var contextParts: [String] = []
+            var nonVoiceIndex = 0
+            for item in items {
+                let content = contentString(for: item)
+                if item.contentType == .voiceNote {
+                    let header = "### \(item.contentType.label)"
+                    contextParts.append("\(header)\n\(markdownContent(for: item, raw: content))")
+                } else {
+                    nonVoiceIndex += 1
+                    let header = "### \(nonVoiceIndex). \(item.contentType.label)"
+                    contextParts.append("\(header)\n\(markdownContent(for: item, raw: content))")
+                }
+            }
+            parts.append("## Context\n\(contextParts.joined(separator: "\n\n"))")
+        }
+
+        return parts.joined(separator: "\n\n")
+    }
+
+    private static func markdownContent(for item: ClipboardItem, raw: String) -> String {
+        switch item.contentType {
+        case .code, .json, .terminal:
+            return "```\n\(raw)\n```"
+        case .image:
+            return "![image](\(raw.replacingOccurrences(of: "[image: ", with: "").replacingOccurrences(of: "]", with: "")))"
+        case .file:
+            return "`\(raw)`"
+        case .url:
+            return raw
+        case .text, .voiceNote:
+            return raw
+        }
+    }
+
+    // MARK: - Shared
 
     private static func contentString(for item: ClipboardItem) -> String {
         if let text = item.textContent {
