@@ -8,7 +8,7 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     private let speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine: AVAudioEngine?
     private let transcription = Mutex("")
     private var completionContinuation: CheckedContinuation<String, any Error>?
 
@@ -42,6 +42,11 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
             throw SpeechEngineError.permissionDenied
         }
 
+        let micGranted = await AVAudioApplication.requestRecordPermission()
+        guard micGranted else {
+            throw SpeechEngineError.permissionDenied
+        }
+
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
@@ -49,15 +54,17 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         self.recognitionRequest = request
         transcription.withLock { $0 = "" }
 
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        // Fresh engine each session so it picks up the current default input device
+        let engine = AVAudioEngine()
+        self.audioEngine = engine
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+        // Pass nil format to let Core Audio negotiate the correct format
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
             request.append(buffer)
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
+        engine.prepare()
+        try engine.start()
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
@@ -84,8 +91,9 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     }
 
     func stopAndTranscribe() async throws -> String {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
         recognitionRequest?.endAudio()
 
         let current = transcription.withLock { $0 }
@@ -111,6 +119,20 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         recognitionTask = nil
         recognitionRequest = nil
         return current
+    }
+
+    func cancel() async {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        transcription.withLock { $0 = "" }
+        if let continuation = completionContinuation {
+            continuation.resume(returning: "")
+            completionContinuation = nil
+        }
     }
 }
 
