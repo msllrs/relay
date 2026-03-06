@@ -1,18 +1,17 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 #if canImport(FluidAudio)
 import FluidAudio
 #endif
 
-/// FluidAudio/Parakeet-based transcription engine.
+/// FluidAudio/Parakeet-based transcription engine with streaming support.
 final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     #if canImport(FluidAudio)
-    private var asrManager: AsrManager?
+    private var loadedModels: AsrModels?
+    private var streamingManager: StreamingAsrManager?
     #endif
     private var audioEngine: AVAudioEngine?
-    private var audioFile: AVAudioFile?
-    private var tempFileURL: URL?
 
     var isAvailable: Bool {
         #if canImport(FluidAudio)
@@ -24,7 +23,7 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
 
     var needsModelDownload: Bool {
         #if canImport(FluidAudio)
-        return asrManager == nil
+        return loadedModels == nil
         #else
         return true
         #endif
@@ -32,9 +31,12 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
 
     func downloadModel(progress: @escaping @Sendable (Double) -> Void) async throws {
         #if canImport(FluidAudio)
-        progress(0.1)
-        let model = try await AsrModels.downloadAndLoad(version: .v3)
-        asrManager = AsrManager(model: model)
+        progress(0.05)
+        let modelDir = try await AsrModels.download(version: .v3)
+        progress(0.3)
+        let models = try await AsrModels.load(from: modelDir, version: .v3)
+        progress(0.9)
+        loadedModels = models
         progress(1.0)
         #else
         throw SpeechEngineError.engineUnavailable
@@ -43,32 +45,32 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
 
     func startStreaming(onPartialResult: @escaping @Sendable (String) -> Void) async throws {
         #if canImport(FluidAudio)
-        guard asrManager != nil else {
+        guard let models = loadedModels else {
             throw SpeechEngineError.engineUnavailable
         }
 
-        let engine = AVAudioEngine()
-        self.audioEngine = engine
+        let streaming = StreamingAsrManager(config: .default)
+        self.streamingManager = streaming
 
-        let inputNode = engine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        // StreamingAsrManager handles mic capture internally with .microphone source
+        try await streaming.start(models: models, source: .microphone)
 
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("wav")
-        self.tempFileURL = tempURL
-
-        let audioFile = try AVAudioFile(forWriting: tempURL, settings: recordingFormat.settings)
-        self.audioFile = audioFile
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
-            try? audioFile.write(from: buffer)
+        // Get the update stream while in actor context, then iterate outside
+        let updates = await streaming.transcriptionUpdates
+        Task {
+            var confirmedText = ""
+            for await update in updates {
+                if update.isConfirmed {
+                    confirmedText += (confirmedText.isEmpty ? "" : " ") + update.text
+                    onPartialResult(confirmedText)
+                } else {
+                    let display = confirmedText.isEmpty
+                        ? update.text
+                        : confirmedText + " " + update.text
+                    onPartialResult(display)
+                }
+            }
         }
-
-        engine.prepare()
-        try engine.start()
-
-        onPartialResult("[Recording... transcription will appear when you stop]")
         #else
         throw SpeechEngineError.engineUnavailable
         #endif
@@ -79,21 +81,28 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine = nil
-        audioFile = nil
 
-        guard let asrManager, let tempURL = tempFileURL else {
+        guard let streaming = streamingManager else {
             throw SpeechEngineError.transcriptionFailed("No recording available")
         }
 
-        let audioData = try AudioConverter.loadAndConvert(url: tempURL)
-        let result = try await asrManager.transcribe(audioData: audioData)
+        let finalText = try await streaming.finish()
+        streamingManager = nil
 
-        try? FileManager.default.removeItem(at: tempURL)
-        tempFileURL = nil
-
-        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return finalText.trimmingCharacters(in: .whitespacesAndNewlines)
         #else
         throw SpeechEngineError.engineUnavailable
+        #endif
+    }
+
+    func cancel() async {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+
+        #if canImport(FluidAudio)
+        await streamingManager?.cancel()
+        streamingManager = nil
         #endif
     }
 }
