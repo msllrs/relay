@@ -6,7 +6,9 @@ struct ContextStackView: View {
     var body: some View {
         List {
             ForEach(stack.items) { item in
-                ClipboardItemRow(item: item)
+                ClipboardItemRow(item: item, onRemove: {
+                    stack.remove(id: item.id)
+                })
             }
             .onDelete { offsets in
                 stack.remove(at: offsets)

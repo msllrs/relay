@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ClipboardItemRow: View {
     let item: ClipboardItem
+    var onRemove: (() -> Void)?
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -27,14 +29,24 @@ struct ClipboardItemRow: View {
                         .foregroundStyle(.primary)
                 }
             }
-
-            Spacer()
-
-            Text(item.timestamp, style: .relative)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 2)
+        .overlay(alignment: .topTrailing) {
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1 : 0)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
         .accessibilityLabel("\(item.contentType.label): \(item.preview)")
     }
 }
