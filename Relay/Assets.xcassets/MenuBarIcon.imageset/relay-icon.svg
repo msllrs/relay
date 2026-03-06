@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+  <!-- Arc: upward curve suggesting relay/transfer -->
+  <path d="M3 12 C3 6, 15 6, 15 12" stroke="black" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Arrow pointing up from center of arc -->
+  <path d="M9 11 L9 5" stroke="black" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M6.5 7.5 L9 5 L11.5 7.5" stroke="black" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

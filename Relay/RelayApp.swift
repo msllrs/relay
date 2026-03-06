@@ -9,8 +9,7 @@ struct RelayApp: App {
             MenuBarPopover()
                 .environmentObject(appState)
         } label: {
-            Image(systemName: "arrow.up.arrow.down.circle")
-                .symbolRenderingMode(.hierarchical)
+            MenuBarIcon(appState: appState)
         }
         .menuBarExtraStyle(.window)
     }
