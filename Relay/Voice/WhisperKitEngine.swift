@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 
 #if canImport(WhisperKit)
@@ -40,7 +41,7 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         #endif
     }
 
-    func startStreaming(onPartialResult: @escaping @Sendable (String) -> Void) async throws {
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws {
         #if canImport(WhisperKit)
         guard whisperKit != nil else {
             throw SpeechEngineError.engineUnavailable
@@ -48,6 +49,10 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
 
         let engine = AVAudioEngine()
         self.audioEngine = engine
+
+        if let deviceID = inputDeviceID {
+            AudioDeviceManager.setInputDevice(deviceID, on: engine)
+        }
 
         let recordingFormat = engine.validInputFormat()
 

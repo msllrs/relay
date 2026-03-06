@@ -7,6 +7,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
     case url
     case text
     case image
+    case file
     case voiceNote
 
     var id: String { rawValue }
@@ -19,6 +20,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .url: "URL"
         case .text: "Text"
         case .image: "Image"
+        case .file: "File"
         case .voiceNote: "Voice Note"
         }
     }
@@ -31,6 +33,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .url: "link"
         case .text: "doc.text"
         case .image: "photo"
+        case .file: "doc"
         case .voiceNote: "mic.fill"
         }
     }

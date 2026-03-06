@@ -33,11 +33,25 @@ final class ClipboardMonitor {
         let pasteboard = NSPasteboard.general
         lastChangeCount = pasteboard.changeCount
 
+        // Try to read file URLs first (Finder copies include icon TIFF too)
+        if let fileURLs = readFileURLs(from: pasteboard) {
+            for url in fileURLs {
+                let item = itemForFileURL(url)
+                if !isDuplicateOfLastItem(item) {
+                    appState.stack.add(item)
+                    appState.recordRefMarker(for: item.id)
+                    appState.notifyItemAdded()
+                }
+            }
+            return
+        }
+
         if let imageData = readImage(from: pasteboard),
            let path = saveImageToTemp(imageData) {
             let item = ClipboardItem(contentType: .image, imagePath: path)
             if !isDuplicateOfLastItem(item) {
                 appState.stack.add(item)
+                appState.recordRefMarker(for: item.id)
                 appState.notifyItemAdded()
             }
             return
@@ -49,6 +63,7 @@ final class ClipboardMonitor {
             let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
             if !isDuplicateOfLastItem(item) {
                 appState.stack.add(item)
+                appState.recordRefMarker(for: item.id)
                 appState.notifyItemAdded()
             }
         }
@@ -69,12 +84,26 @@ final class ClipboardMonitor {
             return
         }
 
-        // Try to read image first (higher fidelity check)
+        // Try to read file URLs first (Finder copies include icon TIFF too)
+        if let fileURLs = readFileURLs(from: pasteboard) {
+            for url in fileURLs {
+                let item = itemForFileURL(url)
+                if !isDuplicateOfLastItem(item) {
+                    appState.stack.add(item)
+                    appState.recordRefMarker(for: item.id)
+                    appState.notifyItemAdded()
+                }
+            }
+            return
+        }
+
+        // Try to read image
         if let imageData = readImage(from: pasteboard),
            let path = saveImageToTemp(imageData) {
             let item = ClipboardItem(contentType: .image, imagePath: path)
             if !isDuplicateOfLastItem(item) {
                 appState.stack.add(item)
+                appState.recordRefMarker(for: item.id)
                 appState.notifyItemAdded()
             }
             return
@@ -87,6 +116,7 @@ final class ClipboardMonitor {
             let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
             if !isDuplicateOfLastItem(item) {
                 appState.stack.add(item)
+                appState.recordRefMarker(for: item.id)
                 appState.notifyItemAdded()
             }
         }
@@ -111,6 +141,28 @@ final class ClipboardMonitor {
         }
 
         return false
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "tiff", "tif", "bmp", "webp", "heic", "heif"
+    ]
+
+    /// If the file URL points to an image, create an image item using the file path directly.
+    /// Otherwise create a file item.
+    private func itemForFileURL(_ url: URL) -> ClipboardItem {
+        let ext = url.pathExtension.lowercased()
+        if Self.imageExtensions.contains(ext) {
+            return ClipboardItem(contentType: .image, imagePath: url.path)
+        }
+        return ClipboardItem(contentType: .file, textContent: url.path)
+    }
+
+    private func readFileURLs(from pasteboard: NSPasteboard) -> [URL]? {
+        guard let objects = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else {
+            return nil
+        }
+        let fileURLs = objects.filter { $0.isFileURL }
+        return fileURLs.isEmpty ? nil : fileURLs
     }
 
     private func readImage(from pasteboard: NSPasteboard) -> Data? {

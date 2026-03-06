@@ -27,7 +27,7 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         progress(1.0)
     }
 
-    func startStreaming(onPartialResult: @escaping @Sendable (String) -> Void) async throws {
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             throw SpeechEngineError.engineUnavailable
         }
@@ -57,6 +57,10 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         // Fresh engine each session so it picks up the current default input device
         let engine = AVAudioEngine()
         self.audioEngine = engine
+
+        if let deviceID = inputDeviceID {
+            AudioDeviceManager.setInputDevice(deviceID, on: engine)
+        }
 
         // Pass nil format to let Core Audio negotiate the correct format
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in

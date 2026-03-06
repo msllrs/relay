@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 
 /// Manages the active speech engine, recording state, and engine switching.
@@ -15,6 +16,9 @@ final class VoiceManager: ObservableObject {
     @Published var isDownloading = false
     @Published var downloadProgress: Double = 0
     @Published var error: String?
+
+    /// The input device to use for recording. `nil` means system default.
+    var inputDeviceID: AudioDeviceID?
 
     private nonisolated(unsafe) var activeEngine: any SpeechEngine
     private var previousInputVolume: Float?
@@ -61,16 +65,21 @@ final class VoiceManager: ObservableObject {
         }
     }
 
-    private func startRecording() {
+    func startRecording() {
         guard !isRecording else { return }
         error = nil
         partialTranscription = ""
         isRecording = true
 
         let engine = activeEngine
+        // Fall back to system default if the selected device is no longer available
+        var deviceID = inputDeviceID
+        if let id = deviceID, !AudioDeviceManager.inputDevices().contains(where: { $0.id == id }) {
+            deviceID = nil
+        }
         Task {
             do {
-                try await engine.startStreaming { [weak self] partial in
+                try await engine.startStreaming(inputDeviceID: deviceID) { [weak self] partial in
                     Task { @MainActor in
                         self?.partialTranscription = partial
                     }
@@ -82,13 +91,13 @@ final class VoiceManager: ObservableObject {
 
             // Max mic volume after engine starts (so it doesn't interfere with audio session setup)
             if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil || UserDefaults.standard.bool(forKey: "maxMicOnRecord") {
-                self.previousInputVolume = SystemAudioHelper.getInputVolume()
-                SystemAudioHelper.setInputVolume(1.0)
+                self.previousInputVolume = SystemAudioHelper.getInputVolume(deviceID: deviceID)
+                SystemAudioHelper.setInputVolume(1.0, deviceID: deviceID)
             }
         }
     }
 
-    private func stopRecording(onComplete: @escaping @MainActor (String) -> Void) {
+    func stopRecording(onComplete: @escaping @MainActor (String) -> Void) {
         guard isRecording else { return }
 
         let engine = activeEngine
@@ -123,7 +132,7 @@ final class VoiceManager: ObservableObject {
 
     private func restoreInputVolume() {
         if let volume = previousInputVolume {
-            SystemAudioHelper.setInputVolume(volume)
+            SystemAudioHelper.setInputVolume(volume, deviceID: inputDeviceID)
             previousInputVolume = nil
         }
     }

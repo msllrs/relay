@@ -20,9 +20,9 @@ enum SystemAudioHelper {
         return deviceID
     }
 
-    /// Gets the current input volume (0.0–1.0) for the default input device.
-    static func getInputVolume() -> Float? {
-        guard let deviceID = defaultInputDevice() else { return nil }
+    /// Gets the current input volume (0.0–1.0). Uses the specified device, or system default if `nil`.
+    static func getInputVolume(deviceID: AudioDeviceID? = nil) -> Float? {
+        guard let deviceID = deviceID ?? defaultInputDevice() else { return nil }
         var volume: Float32 = 0
         var size = UInt32(MemoryLayout<Float32>.size)
         var address = AudioObjectPropertyAddress(
@@ -45,10 +45,10 @@ enum SystemAudioHelper {
         return volume
     }
 
-    /// Sets the input volume (0.0–1.0) for the default input device.
+    /// Sets the input volume (0.0–1.0). Uses the specified device, or system default if `nil`.
     @discardableResult
-    static func setInputVolume(_ volume: Float) -> Bool {
-        guard let deviceID = defaultInputDevice() else { return false }
+    static func setInputVolume(_ volume: Float, deviceID: AudioDeviceID? = nil) -> Bool {
+        guard let deviceID = deviceID ?? defaultInputDevice() else { return false }
         var vol = volume
         let size = UInt32(MemoryLayout<Float32>.size)
         var address = AudioObjectPropertyAddress(

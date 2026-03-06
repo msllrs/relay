@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import CoreAudio
 import Foundation
 
 #if canImport(FluidAudio)
@@ -43,7 +44,7 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         #endif
     }
 
-    func startStreaming(onPartialResult: @escaping @Sendable (String) -> Void) async throws {
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws {
         #if canImport(FluidAudio)
         guard let models = loadedModels else {
             throw SpeechEngineError.engineUnavailable

@@ -12,7 +12,7 @@ struct MenuBarPopover: View {
                     Text("Relay")
                         .font(.headline)
                     Circle()
-                        .fill(appState.isMonitoring ? .green : .red)
+                        .fill(appState.isRecording ? .orange : appState.isMonitoring ? .green : .red)
                         .frame(width: 8, height: 8)
                 }
 
@@ -21,7 +21,7 @@ struct MenuBarPopover: View {
                 Button {
                     showSettings.toggle()
                 } label: {
-                    Image(systemName: "gear")
+                    Image(systemName: showSettings ? "xmark" : "gear")
                 }
                 .buttonStyle(.plain)
             }
@@ -30,157 +30,193 @@ struct MenuBarPopover: View {
 
             Divider()
 
-            // Task intent
-            TaskIntentView(taskIntent: $appState.taskIntent)
-
-            Divider()
-
-            // Voice recording
-            VoiceNoteButton(voiceManager: appState.voiceManager) { transcription in
-                let item = ClipboardItem(contentType: .voiceNote, textContent: transcription)
-                appState.stack.add(item)
-            }
-
-            Divider()
-
-            // Context stack or empty state
-            if appState.stack.isEmpty {
-                EmptyStateView(isMonitoring: appState.isMonitoring)
-            } else {
-                ContextStackView(stack: appState.stack)
-            }
-
-            Divider()
-
-            // Settings panel (collapsible)
             if showSettings {
-                SettingsSection(voiceManager: appState.voiceManager)
-                Divider()
+                SettingsPage(voiceManager: appState.voiceManager)
+            } else {
+                MainPage()
             }
-
-            // Footer actions
-            HStack {
-                if appState.stack.isNearLimit {
-                    Text("\(appState.stack.count)/\(ContextStack.maxItems)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if appState.showCopiedConfirmation {
-                    Text("Copied!")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                        .transition(.opacity)
-                }
-
-                Button("Copy Prompt") {
-                    appState.copyPromptToClipboard()
-                }
-                .disabled(appState.stack.isEmpty)
-
-                Button("Clear") {
-                    appState.stack.clear()
-                }
-                .disabled(appState.stack.isEmpty)
-
-                Button(appState.isMonitoring ? "Pause" : "Resume") {
-                    appState.toggleMonitoring()
-                }
-
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
         }
         .frame(width: 360, height: 480)
         .animation(.easeInOut(duration: 0.2), value: appState.showCopiedConfirmation)
     }
 }
 
-// MARK: - Settings Section
+// MARK: - Main Page
 
-private struct SettingsSection: View {
+private struct MainPage: View {
     @EnvironmentObject var appState: AppState
-    @ObservedObject var voiceManager: VoiceManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Voice Engine")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        // Task intent
+        TaskIntentView(taskIntent: $appState.taskIntent)
 
-            Picker("Engine", selection: $voiceManager.selectedEngineType) {
-                ForEach(SpeechEngineType.allCases) { engine in
-                    Text(engine.label).tag(engine)
-                }
+        Divider()
+
+        // Voice recording
+        VoiceNoteButton(voiceManager: appState.voiceManager) { transcription in
+            let item = ClipboardItem(contentType: .voiceNote, textContent: transcription)
+            appState.stack.add(item)
+        }
+
+        Divider()
+
+        // Context stack or empty state
+        if appState.stack.isEmpty {
+            EmptyStateView(isMonitoring: appState.isMonitoring)
+        } else {
+            ContextStackView(stack: appState.stack)
+        }
+
+        Divider()
+
+        // Footer actions
+        HStack {
+            if appState.stack.isNearLimit {
+                Text("\(appState.stack.count)/\(ContextStack.maxItems)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .pickerStyle(.segmented)
 
-            if voiceManager.currentEngineNeedsDownload {
-                HStack {
-                    if voiceManager.isDownloading {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ProgressView(value: voiceManager.downloadProgress)
-                                .frame(maxWidth: .infinity)
-                            Text(voiceManager.downloadProgress < 0.3
-                                 ? "Downloading models\u{2026}"
-                                 : voiceManager.downloadProgress < 0.9
-                                 ? "Compiling CoreML models (first run)\u{2026}"
-                                 : "Initializing\u{2026}")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Text("\(Int(voiceManager.downloadProgress * 100))%")
-                            .font(.caption)
-                            .monospacedDigit()
-                    } else {
-                        Text("Model download required")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Download") {
-                            Task {
-                                await voiceManager.downloadModelIfNeeded()
-                            }
-                        }
-                        .controlSize(.small)
-                    }
-                }
-            } else {
-                Text("Ready")
+            Spacer()
+
+            if appState.showCopiedConfirmation {
+                Text("Copied!")
                     .font(.caption)
                     .foregroundStyle(.green)
+                    .transition(.opacity)
             }
 
-            Divider()
+            Button("Copy Prompt") {
+                appState.copyPromptToClipboard()
+            }
+            .disabled(appState.stack.isEmpty)
 
-            Toggle("Always-on monitoring", isOn: $appState.alwaysOnMonitoring)
-                .font(.caption)
+            Button("Clear") {
+                appState.stack.clear()
+            }
+            .disabled(appState.stack.isEmpty)
 
-            Toggle("Clear stack after copying", isOn: $appState.clearStackOnCopy)
-                .font(.caption)
+            Button(appState.isMonitoring ? "Pause" : "Resume") {
+                appState.toggleMonitoring()
+            }
 
-            Toggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
-                .font(.caption)
-
-            Toggle("Hotkey starts dictation", isOn: $appState.hotkeyStartsDictation)
-                .font(.caption)
-
-            Divider()
-
-            HStack {
-                Text("Keyboard shortcut")
-                    .font(.caption)
-                Spacer()
-                ShortcutRecorderButton()
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Settings Page
+
+private struct SettingsPage: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var voiceManager: VoiceManager
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Voice Engine")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Engine", selection: $voiceManager.selectedEngineType) {
+                    ForEach(SpeechEngineType.allCases) { engine in
+                        Text(engine.label).tag(engine)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if voiceManager.currentEngineNeedsDownload {
+                    HStack {
+                        if voiceManager.isDownloading {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ProgressView(value: voiceManager.downloadProgress)
+                                    .frame(maxWidth: .infinity)
+                                Text(voiceManager.downloadProgress < 0.3
+                                     ? "Downloading models\u{2026}"
+                                     : voiceManager.downloadProgress < 0.9
+                                     ? "Compiling CoreML models (first run)\u{2026}"
+                                     : "Initializing\u{2026}")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Text("\(Int(voiceManager.downloadProgress * 100))%")
+                                .font(.caption)
+                                .monospacedDigit()
+                        } else {
+                            Text("Model download required")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Download") {
+                                Task {
+                                    await voiceManager.downloadModelIfNeeded()
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                } else {
+                    Text("Ready")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+
+                Divider()
+
+                Text("Input Device")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Device", selection: $appState.selectedInputDeviceID) {
+                    Text("System Default").tag(UInt32(0))
+                    ForEach(AudioDeviceManager.inputDevices()) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .labelsHidden()
+
+                Divider()
+
+                Toggle("Always-on monitoring", isOn: $appState.alwaysOnMonitoring)
+                    .font(.caption)
+
+                Toggle("Clear stack after copying", isOn: $appState.clearStackOnCopy)
+                    .font(.caption)
+
+                Toggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
+                    .font(.caption)
+
+                Toggle("Hotkey starts dictation", isOn: $appState.hotkeyStartsDictation)
+                    .font(.caption)
+
+                Toggle("Push-to-talk", isOn: $appState.pushToTalk)
+                    .font(.caption)
+
+                if appState.pushToTalk {
+                    Toggle("Clean dictation (copy to clipboard)", isOn: $appState.cleanDictation)
+                        .font(.caption)
+                        .padding(.leading, 12)
+                }
+
+                Toggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
+                    .font(.caption)
+
+                Divider()
+
+                HStack {
+                    Text("Keyboard shortcut")
+                        .font(.caption)
+                    Spacer()
+                    ShortcutRecorderButton()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
     }
 }
 
@@ -193,6 +229,7 @@ private struct ShortcutRecorderButton: View {
 
     var body: some View {
         Button(isRecording ? "Press shortcut..." : displayString) {
+            appState.hotkeyManager?.suspendMonitors()
             isRecording = true
         }
         .font(.caption.monospaced())
@@ -203,8 +240,10 @@ private struct ShortcutRecorderButton: View {
                     appState.hotkeyManager?.updateShortcut(shortcut)
                     displayString = shortcut.displayString
                     isRecording = false
+                    appState.hotkeyManager?.resumeMonitors()
                 } onCancel: {
                     isRecording = false
+                    appState.hotkeyManager?.resumeMonitors()
                 }
             }
         }
