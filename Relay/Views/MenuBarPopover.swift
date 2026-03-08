@@ -6,37 +6,34 @@ struct MenuBarPopover: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                HStack(spacing: 6) {
-                    Text("Relay")
-                        .font(.headline)
-                    Circle()
-                        .fill(appState.isRecording ? .orange : appState.isMonitoring ? .green : .red)
-                        .frame(width: 8, height: 8)
-                }
-
-                Spacer()
-
-                Button {
-                    showSettings.toggle()
-                } label: {
-                    Image(systemName: showSettings ? "xmark" : "gear")
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            Divider()
-
             if showSettings {
+                // Settings header with back arrow
+                HStack {
+                    Button {
+                        showSettings = false
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("Settings")
+                        .font(.headline)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+                Divider()
+
                 SettingsPage(voiceManager: appState.voiceManager)
             } else {
-                MainPage()
+                MainPage(showSettings: $showSettings)
             }
         }
-        .frame(width: 360, height: 480)
+        .frame(width: 360)
+        .modifier(OptionKeyTracker())
         .animation(.easeInOut(duration: 0.2), value: appState.showCopiedConfirmation)
     }
 }
@@ -45,68 +42,135 @@ struct MenuBarPopover: View {
 
 private struct MainPage: View {
     @EnvironmentObject var appState: AppState
+    @Binding var showSettings: Bool
+
+    private var shortcutDisplay: String {
+        KeyboardShortcutModel.load().displayString
+    }
+
+    private var hasContent: Bool {
+        !appState.stack.isEmpty || !appState.displayTranscription.isEmpty
+    }
 
     var body: some View {
-        // Task intent
-        TaskIntentView(taskIntent: $appState.taskIntent)
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Relay")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .onTapGesture {
+                        guard appState.isDemo else { return }
+                        appState.clearAll()
+                        appState.populateDemoStack()
+                    }
 
-        Divider()
+                Spacer()
 
-        // Voice recording
-        VoiceNoteButton(voiceManager: appState.voiceManager) {
-            appState.startVoiceNote()
-        } onTranscription: { transcription in
-            appState.finishVoiceNote(transcription: transcription)
+                if appState.isRecording {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            // Prompt pill (idle or recording)
+            PromptPillView(
+                isRecording: appState.isRecording,
+                audioLevel: appState.voiceManager.audioLevel,
+                shortcutDisplay: shortcutDisplay,
+                onStop: { appState.finishDictationAndStop() }
+            )
+            .padding(.top, 2)
+
+            // Transcription text with inline chips
+            if !appState.displayTranscription.isEmpty {
+                TranscriptionTextView(
+                    text: appState.displayTranscription,
+                    items: appState.stack.items,
+                    onRemoveRef: { appState.removeRef($0) }
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+
+            // Divider
+            Rectangle()
+                .fill(Color(white: 0.624).opacity(0.14)) // #9F9F9F at 14%
+                .frame(height: 1)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+
+            // Footer menu
+            VStack(spacing: 0) {
+                if appState.showCopiedConfirmation {
+                    menuRow(label: "Copied!", shortcut: nil)
+                        .foregroundStyle(.green)
+                } else if hasContent && !appState.isRecording {
+                    menuButton(label: "Copy Prompt", shortcut: nil) {
+                        appState.copyPromptToClipboard()
+                    }
+
+                    menuButton(label: "Clear Stack", shortcut: nil) {
+                        appState.clearAll()
+                    }
+                }
+
+                menuButton(label: "Settings...", shortcut: "⌘,") {
+                    showSettings = true
+                }
+
+                menuButton(label: "Quit Relay", shortcut: "⌘Q") {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+            .padding(.vertical, 4)
         }
+    }
 
-        Divider()
-
-        // Context stack or empty state
-        if appState.stack.isEmpty {
-            EmptyStateView(isMonitoring: appState.isMonitoring)
-        } else {
-            ContextStackView(stack: appState.stack)
+    @ViewBuilder
+    private func menuButton(label: String, shortcut: String?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            menuRow(label: label, shortcut: shortcut)
         }
+        .buttonStyle(MenuRowButtonStyle())
+    }
 
-        Divider()
-
-        // Footer actions
+    @ViewBuilder
+    private func menuRow(label: String, shortcut: String?) -> some View {
         HStack {
-            if appState.stack.isNearLimit {
-                Text("\(appState.stack.count)/\(ContextStack.maxItems)")
-                    .font(.caption)
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+            Spacer()
+            if let shortcut {
+                Text(shortcut)
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-
-            Spacer()
-
-            if appState.showCopiedConfirmation {
-                Text("Copied!")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                    .transition(.opacity)
-            }
-
-            Button("Copy Prompt") {
-                appState.copyPromptToClipboard()
-            }
-            .disabled(appState.stack.isEmpty)
-
-            Button("Clear") {
-                appState.stack.clear()
-            }
-            .disabled(appState.stack.isEmpty)
-
-            Button(appState.isMonitoring ? "Pause" : "Resume") {
-                appState.toggleMonitoring()
-            }
-
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+}
+
+/// A button style that highlights on hover like native menu items.
+private struct MenuRowButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? Color.accentColor.opacity(0.2) : Color.clear)
+                    .padding(.horizontal, 4)
+            )
+            .onHover { hovering in
+                isHovered = hovering
+            }
     }
 }
 
