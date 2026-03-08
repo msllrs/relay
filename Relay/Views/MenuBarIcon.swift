@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 enum MenuBarIconBuilder {
     // Closed arc — monitoring off
@@ -69,28 +68,10 @@ enum MenuBarIconBuilder {
         return img
     }
 
-    enum IconState {
+    enum IconState: Equatable {
         case normal    // monitoring off
         case active    // monitoring on
         case badge     // item just added (green dot)
         case recording // recording in progress (orange dot)
-    }
-}
-
-struct MenuBarIcon: View {
-    @ObservedObject var appState: AppState
-
-    private var icon: NSImage {
-        if appState.isRecording {
-            return MenuBarIconBuilder.buildIcon(state: .recording)
-        }
-        if appState.isMonitoring {
-            return MenuBarIconBuilder.buildIcon(state: .badge)
-        }
-        return MenuBarIconBuilder.buildIcon(state: .normal)
-    }
-
-    var body: some View {
-        Image(nsImage: icon)
     }
 }

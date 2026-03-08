@@ -34,10 +34,6 @@ final class VoiceManager: ObservableObject {
         activeEngine.needsModelDownload
     }
 
-    var currentEngineIsAvailable: Bool {
-        activeEngine.isAvailable
-    }
-
     func downloadModelIfNeeded() async {
         guard activeEngine.needsModelDownload else { return }
         isDownloading = true
@@ -56,14 +52,6 @@ final class VoiceManager: ObservableObject {
         }
 
         isDownloading = false
-    }
-
-    func toggleRecording(onComplete: @escaping @MainActor (String) -> Void) {
-        if isRecording {
-            stopRecording(onComplete: onComplete)
-        } else {
-            startRecording()
-        }
     }
 
     func startRecording() {

@@ -1,4 +1,3 @@
-@preconcurrency import AVFoundation
 import CoreAudio
 import Foundation
 
@@ -12,7 +11,6 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     private var loadedModels: AsrModels?
     private var streamingManager: StreamingAsrManager?
     #endif
-    private var audioEngine: AVAudioEngine?
 
     var isAvailable: Bool {
         #if canImport(FluidAudio)
@@ -79,10 +77,6 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
 
     func stopAndTranscribe() async throws -> String {
         #if canImport(FluidAudio)
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-
         guard let streaming = streamingManager else {
             throw SpeechEngineError.transcriptionFailed("No recording available")
         }
@@ -97,10 +91,6 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     }
 
     func cancel() async {
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-
         #if canImport(FluidAudio)
         await streamingManager?.cancel()
         streamingManager = nil
