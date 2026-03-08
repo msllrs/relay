@@ -129,6 +129,7 @@ final class AppState: ObservableObject {
 
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" {
             populateDemoStack()
+            startMonitoring()
         } else if alwaysOnMonitoring {
             startMonitoring()
         }
@@ -373,7 +374,7 @@ final class AppState: ObservableObject {
     func notifyItemAdded() {
         itemJustAdded = true
         Task {
-            try? await Task.sleep(for: .seconds(0.8))
+            try? await Task.sleep(for: .seconds(2.0))
             itemJustAdded = false
         }
     }
@@ -392,7 +393,10 @@ final class AppState: ObservableObject {
     /// Record a reference marker for a clipboard item captured during dictation.
     func recordRefMarker(for itemID: UUID) {
         guard voiceManager.isRecording else { return }
-        let offset = voiceManager.partialTranscription.count
+        // Use current transcription length so the ref appears after all spoken text so far
+        let partial = voiceManager.partialTranscription
+        // Place at end of current text (not at the raw offset, which can be 0 before speech starts)
+        let offset = partial.isEmpty ? Int.max : partial.count
         pendingRefs.append(PendingRef(itemID: itemID, charOffset: offset))
         rebuildDisplayTranscription()
     }
@@ -421,6 +425,9 @@ final class AppState: ObservableObject {
         withAnimation(.snappy(duration: 0.25)) {
             stack.remove(id: itemToRemove.id)
 
+            // Remove from pending refs if still recording
+            pendingRefs.removeAll { $0.itemID == itemToRemove.id }
+
             // Strip the [ref:N] marker and renumber higher refs
             frozenTranscription = stripAndRenumberRef(in: frozenTranscription, removedIndex: refIndex)
             // Also update voice note textContent that contains ref markers
@@ -429,7 +436,13 @@ final class AppState: ObservableObject {
                     stack.update(id: item.id, textContent: stripAndRenumberRef(in: text, removedIndex: refIndex))
                 }
             }
-            displayTranscription = frozenTranscription
+
+            // Rebuild display: if recording, include live session; otherwise use frozen text
+            if voiceManager.isRecording {
+                rebuildDisplayTranscription()
+            } else {
+                displayTranscription = frozenTranscription
+            }
         }
     }
 

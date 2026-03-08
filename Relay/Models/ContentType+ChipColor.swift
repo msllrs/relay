@@ -3,17 +3,27 @@ import SwiftUI
 extension ContentType {
     var chipColor: Color {
         switch self {
-        case .code: Color(red: 0, green: 0.694, blue: 1) // #00B1FF
-        case .json: Color(red: 0, green: 0.788, blue: 0.761) // #00C9C2
-        case .terminal: Color(white: 0.49) // #7D7D7D
-        case .url: Color(red: 0, green: 0.541, blue: 0.996) // #008AFE
-        case .error: Color(red: 1, green: 0.267, blue: 0.235) // #FF443C
-        case .diff: Color(red: 0, green: 0.788, blue: 0.471) // #00C978
-        case .agentation: Color(red: 0.298, green: 0.455, blue: 1) // #4C74FF
-        case .text: Color(white: 0.49) // #7D7D7D
-        case .image: Color(red: 0.659, green: 0.349, blue: 0.996) // #A859FE
-        case .file: Color(red: 0.976, green: 0.667, blue: 0) // #F9AA00
-        case .voiceNote: Color(red: 1, green: 0.365, blue: 0.682) // #FF5DAE
+        case .code: Self.adaptive(light: (0, 0.55, 0.85), dark: (0, 0.694, 1))
+        case .json: Self.adaptive(light: (0, 0.60, 0.58), dark: (0, 0.788, 0.761))
+        case .terminal: Self.adaptive(light: (0.35, 0.35, 0.35), dark: (0.49, 0.49, 0.49))
+        case .url: Self.adaptive(light: (0, 0.42, 0.82), dark: (0, 0.541, 0.996))
+        case .error: Self.adaptive(light: (0.85, 0.15, 0.12), dark: (1, 0.267, 0.235))
+        case .diff: Self.adaptive(light: (0, 0.60, 0.36), dark: (0, 0.788, 0.471))
+        case .agentation: Self.adaptive(light: (0.22, 0.33, 0.85), dark: (0.298, 0.455, 1))
+        case .text: Self.adaptive(light: (0.35, 0.35, 0.35), dark: (0.49, 0.49, 0.49))
+        case .image: Self.adaptive(light: (0.52, 0.22, 0.82), dark: (0.659, 0.349, 0.996))
+        case .file: Self.adaptive(light: (0.78, 0.52, 0), dark: (0.976, 0.667, 0))
+        case .voiceNote: Self.adaptive(light: (0.85, 0.22, 0.52), dark: (1, 0.365, 0.682))
         }
+    }
+
+    private static func adaptive(light: (CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat)) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                NSColor(red: dark.0, green: dark.1, blue: dark.2, alpha: 1)
+            } else {
+                NSColor(red: light.0, green: light.1, blue: light.2, alpha: 1)
+            }
+        })
     }
 }

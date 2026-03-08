@@ -33,6 +33,7 @@ struct TranscriptionTextView: View {
             }
         }
         .animation(.snappy(duration: 0.25), value: text)
+        .animation(.snappy(duration: 0.25), value: items.count)
     }
 
     private enum SegmentKind {
@@ -60,6 +61,8 @@ struct TranscriptionTextView: View {
         var remaining = displayText[...]
         // Track word occurrences to create stable IDs even for duplicate words
         var wordCounts: [String: Int] = [:]
+        // Track which 1-based item indices are referenced in the text
+        var referencedIndices: Set<Int> = []
 
         while let match = remaining.firstMatch(of: pattern) {
             // Text before the match → split into words
@@ -78,6 +81,7 @@ struct TranscriptionTextView: View {
                     ? resolved[refIndex - 1].id.uuidString
                     : "unknown\(refIndex)"
                 result.append(Segment(id: "ref_\(itemID)", kind: .chip(refIndex)))
+                referencedIndices.insert(refIndex)
             }
 
             remaining = remaining[match.range.upperBound...]
@@ -90,6 +94,14 @@ struct TranscriptionTextView: View {
             let count = wordCounts[w, default: 0]
             wordCounts[w] = count + 1
             result.append(Segment(id: "w_\(w)_\(count)", kind: .word(w)))
+        }
+
+        // Append chips for items not referenced in the text (captured while not recording)
+        for (i, item) in resolved.enumerated() {
+            let refIndex = i + 1
+            if !referencedIndices.contains(refIndex) {
+                result.append(Segment(id: "ref_\(item.id.uuidString)", kind: .chip(refIndex)))
+            }
         }
 
         return result

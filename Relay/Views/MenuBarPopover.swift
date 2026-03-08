@@ -75,6 +75,7 @@ private struct MainPage: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .transaction { $0.animation = nil }
 
             // Prompt pill (idle or recording)
             PromptPillView(
@@ -84,6 +85,7 @@ private struct MainPage: View {
                 onStop: { appState.finishDictationAndStop() }
             )
             .padding(.top, 2)
+            .transaction { $0.animation = nil }
 
             // Transcription text with inline chips
             if !appState.displayTranscription.isEmpty {
@@ -94,40 +96,44 @@ private struct MainPage: View {
                 )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+                .transaction { $0.animation = nil }
             }
 
-            // Divider
-            Rectangle()
-                .fill(Color(white: 0.624).opacity(0.14)) // #9F9F9F at 14%
-                .frame(height: 1)
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
+            // Footer: divider + menu items (hidden while recording)
+            if !appState.isRecording {
+                VStack(spacing: 0) {
+                    Rectangle()
+                        .fill(Color(white: 0.624).opacity(0.14))
+                        .frame(height: 1)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
 
-            // Footer menu
-            VStack(spacing: 0) {
-                if appState.showCopiedConfirmation {
-                    menuRow(label: "Copied!", shortcut: nil)
-                        .foregroundStyle(.green)
-                } else if hasContent && !appState.isRecording {
-                    menuButton(label: "Copy Prompt", shortcut: nil) {
-                        appState.copyPromptToClipboard()
+                    if appState.showCopiedConfirmation {
+                        menuRow(label: "Copied!", shortcut: nil)
+                            .foregroundStyle(.green)
+                    } else if hasContent {
+                        menuButton(label: "Copy Prompt", shortcut: nil) {
+                            appState.copyPromptToClipboard()
+                        }
+
+                        menuButton(label: "Clear Stack", shortcut: nil) {
+                            appState.clearAll()
+                        }
                     }
 
-                    menuButton(label: "Clear Stack", shortcut: nil) {
-                        appState.clearAll()
+                    menuButton(label: "Settings...", shortcut: "⌘,") {
+                        showSettings = true
+                    }
+
+                    menuButton(label: "Quit Relay", shortcut: "⌘Q") {
+                        NSApplication.shared.terminate(nil)
                     }
                 }
-
-                menuButton(label: "Settings...", shortcut: "⌘,") {
-                    showSettings = true
-                }
-
-                menuButton(label: "Quit Relay", shortcut: "⌘Q") {
-                    NSApplication.shared.terminate(nil)
-                }
+                .padding(.bottom, 4)
+                .transition(.opacity)
             }
-            .padding(.vertical, 4)
         }
+        .animation(.easeInOut(duration: 0.2), value: appState.isRecording)
     }
 
     @ViewBuilder

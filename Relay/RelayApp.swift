@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 @main
@@ -15,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private let appState = AppState()
-    private var eventMonitor: Any?
+    private var cancellables: [Any] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -34,21 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 .environmentObject(appState)
         )
 
-        // Update the icon when state changes
-        let cancellable1 = appState.$isRecording.sink { [weak self] recording in
-            self?.updateIcon()
-            _ = recording
-        }
-        let cancellable2 = appState.$isMonitoring.sink { [weak self] _ in
-            self?.updateIcon()
-        }
-        let cancellable3 = appState.$itemJustAdded.sink { [weak self] _ in
-            self?.updateIcon()
-        }
-        // Keep references alive
-        objc_setAssociatedObject(self, "c1", cancellable1, .OBJC_ASSOCIATION_RETAIN)
-        objc_setAssociatedObject(self, "c2", cancellable2, .OBJC_ASSOCIATION_RETAIN)
-        objc_setAssociatedObject(self, "c3", cancellable3, .OBJC_ASSOCIATION_RETAIN)
+        // Update the icon when any AppState property changes.
+        // objectWillChange fires before the value is set, so defer to next run loop.
+        cancellables.append(appState.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateIcon() })
     }
 
     @objc private func togglePopover() {

@@ -23,7 +23,7 @@ struct PromptPillView: View {
     private var idlePill: some View {
         Text("Press \(shortcutDisplay) to start recording")
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity)
             .frame(height: 36)
             .background(
