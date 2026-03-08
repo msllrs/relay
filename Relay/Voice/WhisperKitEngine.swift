@@ -41,7 +41,7 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         #endif
     }
 
-    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws {
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void, onAudioLevel: @escaping @Sendable (Float) -> Void) async throws {
         #if canImport(WhisperKit)
         guard whisperKit != nil else {
             throw SpeechEngineError.engineUnavailable

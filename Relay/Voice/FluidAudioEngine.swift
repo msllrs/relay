@@ -44,7 +44,7 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         #endif
     }
 
-    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws {
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void, onAudioLevel: @escaping @Sendable (Float) -> Void) async throws {
         #if canImport(FluidAudio)
         guard let models = loadedModels else {
             throw SpeechEngineError.engineUnavailable

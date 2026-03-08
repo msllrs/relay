@@ -27,7 +27,7 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         progress(1.0)
     }
 
-    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws {
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void, onAudioLevel: @escaping @Sendable (Float) -> Void) async throws {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             throw SpeechEngineError.engineUnavailable
         }
@@ -65,6 +65,19 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         // Pass nil format to let Core Audio negotiate the correct format
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
             request.append(buffer)
+
+            // Compute RMS for audio level metering
+            guard let channelData = buffer.floatChannelData else { return }
+            let frames = Int(buffer.frameLength)
+            guard frames > 0 else { return }
+            let samples = channelData[0]
+            var sum: Float = 0
+            for i in 0..<frames {
+                let s = samples[i]
+                sum += s * s
+            }
+            let rms = sqrtf(sum / Float(frames))
+            onAudioLevel(rms)
         }
 
         engine.prepare()

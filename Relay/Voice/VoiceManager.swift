@@ -13,6 +13,7 @@ final class VoiceManager: ObservableObject {
 
     @Published var isRecording = false
     @Published var partialTranscription = ""
+    @Published var audioLevel: Float = 0
     @Published var isDownloading = false
     @Published var downloadProgress: Double = 0
     @Published var error: String?
@@ -79,11 +80,15 @@ final class VoiceManager: ObservableObject {
         }
         Task {
             do {
-                try await engine.startStreaming(inputDeviceID: deviceID) { [weak self] partial in
+                try await engine.startStreaming(inputDeviceID: deviceID, onPartialResult: { [weak self] partial in
                     Task { @MainActor in
                         self?.partialTranscription = partial
                     }
-                }
+                }, onAudioLevel: { [weak self] level in
+                    Task { @MainActor in
+                        self?.audioLevel = level
+                    }
+                })
             } catch {
                 self.error = error.localizedDescription
                 self.isRecording = false
@@ -107,6 +112,7 @@ final class VoiceManager: ObservableObject {
                 self.restoreInputVolume()
                 self.isRecording = false
                 self.partialTranscription = ""
+                self.audioLevel = 0
                 if !transcription.isEmpty {
                     onComplete(transcription)
                 }
@@ -114,6 +120,7 @@ final class VoiceManager: ObservableObject {
                 self.restoreInputVolume()
                 self.error = error.localizedDescription
                 self.isRecording = false
+                self.audioLevel = 0
             }
         }
     }
@@ -127,6 +134,7 @@ final class VoiceManager: ObservableObject {
             self.restoreInputVolume()
             self.isRecording = false
             self.partialTranscription = ""
+            self.audioLevel = 0
         }
     }
 

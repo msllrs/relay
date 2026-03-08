@@ -15,7 +15,7 @@ protocol SpeechEngine: AnyObject, Sendable {
 
     /// Start streaming speech recognition using a specific input device.
     /// Pass `nil` for `inputDeviceID` to use the system default.
-    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void) async throws
+    func startStreaming(inputDeviceID: AudioDeviceID?, onPartialResult: @escaping @Sendable (String) -> Void, onAudioLevel: @escaping @Sendable (Float) -> Void) async throws
 
     /// Stop recording and return the final transcription.
     func stopAndTranscribe() async throws -> String
