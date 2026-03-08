@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let popover = NSPopover()
     private let appState = AppState()
     private var cancellables: [Any] = []
+    private var lastIconState: MenuBarIconBuilder.IconState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -63,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         } else {
             state = .normal
         }
+        guard state != lastIconState else { return }
+        lastIconState = state
         statusItem.button?.image = MenuBarIconBuilder.buildIcon(state: state)
     }
 }
