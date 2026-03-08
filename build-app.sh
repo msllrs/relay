@@ -15,6 +15,9 @@ if [ -d ".build/debug/Relay_Relay.bundle" ]; then
     cp -R ".build/debug/Relay_Relay.bundle" "$APP_DIR/Resources/"
 fi
 
+# Copy app icon
+cp Relay/Resources/AppIcon.icns "$APP_DIR/Resources/AppIcon.icns"
+
 cat > "$APP_DIR/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -26,6 +29,8 @@ cat > "$APP_DIR/Info.plist" << 'PLIST'
 	<string>Relay</string>
 	<key>CFBundleExecutable</key>
 	<string>Relay</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>LSUIElement</key>
