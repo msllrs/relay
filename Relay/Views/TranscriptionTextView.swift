@@ -23,11 +23,16 @@ struct TranscriptionTextView: View {
                         previewImage: item?.thumbnail,
                         onRemove: { onRemoveRef?(index) }
                     )
-                    .transition(.opacity)
+                    .transition(
+                        .modifier(
+                            active: ChipDismissModifier(progress: 1),
+                            identity: ChipDismissModifier(progress: 0)
+                        )
+                    )
                 }
             }
         }
-        .animation(.snappy(duration: 0.2), value: text)
+        .animation(.snappy(duration: 0.25), value: text)
     }
 
     private enum SegmentKind {
@@ -94,5 +99,22 @@ struct TranscriptionTextView: View {
         let resolved = nonVoiceItems
         guard index >= 1, index <= resolved.count else { return nil }
         return resolved[index - 1]
+    }
+}
+
+/// Combines scale, opacity, and blur into a single animatable transition for chip removal.
+private struct ChipDismissModifier: ViewModifier, Animatable {
+    var progress: Double // 0 = identity, 1 = fully dismissed
+
+    nonisolated var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(1 - progress * 0.99, anchor: .leading)
+            .opacity(1 - progress)
+            .blur(radius: progress * 4)
     }
 }

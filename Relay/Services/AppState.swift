@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
 
 @MainActor
 final class AppState: ObservableObject {
@@ -416,17 +417,20 @@ final class AppState: ObservableObject {
         let nonVoiceItems = stack.items.filter { $0.contentType != .voiceNote }
         guard refIndex >= 1, refIndex <= nonVoiceItems.count else { return }
         let itemToRemove = nonVoiceItems[refIndex - 1]
-        stack.remove(id: itemToRemove.id)
 
-        // Strip the [ref:N] marker and renumber higher refs
-        frozenTranscription = stripAndRenumberRef(in: frozenTranscription, removedIndex: refIndex)
-        // Also update voice note textContent that contains ref markers
-        for item in stack.items where item.contentType == .voiceNote {
-            if let text = item.textContent {
-                stack.update(id: item.id, textContent: stripAndRenumberRef(in: text, removedIndex: refIndex))
+        withAnimation(.snappy(duration: 0.25)) {
+            stack.remove(id: itemToRemove.id)
+
+            // Strip the [ref:N] marker and renumber higher refs
+            frozenTranscription = stripAndRenumberRef(in: frozenTranscription, removedIndex: refIndex)
+            // Also update voice note textContent that contains ref markers
+            for item in stack.items where item.contentType == .voiceNote {
+                if let text = item.textContent {
+                    stack.update(id: item.id, textContent: stripAndRenumberRef(in: text, removedIndex: refIndex))
+                }
             }
+            displayTranscription = frozenTranscription
         }
-        displayTranscription = frozenTranscription
     }
 
     /// Remove `[ref:N]` for the given index and decrement all higher ref numbers.
