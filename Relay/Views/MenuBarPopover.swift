@@ -85,6 +85,7 @@ private struct MainPage: View {
                 onStop: { appState.finishDictationAndStop() }
             )
             .padding(.top, 2)
+            .padding(.bottom, appState.displayTranscription.isEmpty ? 10 : 0)
             .transaction { $0.animation = nil }
 
             // Transcription text with inline chips
@@ -100,40 +101,79 @@ private struct MainPage: View {
             }
 
             // Footer: divider + menu items (hidden while recording)
-            if !appState.isRecording {
-                VStack(spacing: 0) {
-                    Rectangle()
-                        .fill(Color(white: 0.624).opacity(0.14))
-                        .frame(height: 1)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 6)
+            FooterView(
+                hasContent: hasContent,
+                isRecording: appState.isRecording,
+                showCopiedConfirmation: appState.showCopiedConfirmation,
+                showSettings: $showSettings,
+                onCopy: { appState.copyPromptToClipboard() },
+                onClear: { appState.clearAll() }
+            )
+        }
+        .background(PopoverKeyHandler(
+            onCopy: hasContent && !appState.isRecording ? { appState.copyPromptToClipboard() } : nil,
+            onClear: hasContent && !appState.isRecording ? { appState.clearAll() } : nil
+        ))
+    }
+}
 
-                    if appState.showCopiedConfirmation {
-                        menuRow(label: "Copied!", shortcut: nil)
-                            .foregroundStyle(.green)
-                    } else if hasContent {
-                        menuButton(label: "Copy Prompt", shortcut: nil) {
-                            appState.copyPromptToClipboard()
-                        }
+// MARK: - Footer
 
-                        menuButton(label: "Clear Stack", shortcut: nil) {
-                            appState.clearAll()
-                        }
-                    }
+/// Footer that smoothly animates height + opacity/blur when recording toggles.
+/// Always present in the layout to prevent content above from jumping.
+private struct FooterView: View {
+    let hasContent: Bool
+    let isRecording: Bool
+    let showCopiedConfirmation: Bool
+    @Binding var showSettings: Bool
+    var onCopy: () -> Void
+    var onClear: () -> Void
 
-                    menuButton(label: "Settings...", shortcut: "⌘,") {
-                        showSettings = true
-                    }
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color(white: 0.624).opacity(0.14))
+                .frame(height: 1)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 16)
 
-                    menuButton(label: "Quit Relay", shortcut: "⌘Q") {
-                        NSApplication.shared.terminate(nil)
-                    }
+            if showCopiedConfirmation {
+                HStack(spacing: 8) {
+                    pillButton(label: "Copied!", action: {})
+                        .foregroundStyle(.green)
                 }
+                .padding(.horizontal, 16)
                 .padding(.bottom, 4)
-                .transition(.opacity)
+            } else if hasContent {
+                HStack(spacing: 8) {
+                    pillButton(label: "Copy Prompt", action: onCopy)
+                    pillButton(label: "Clear Stack", action: onClear)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+            }
+
+            menuButton(label: "Settings...", shortcut: "⌘,") {
+                showSettings = true
+            }
+
+            menuButton(label: "Quit Relay", shortcut: "⌘Q") {
+                NSApplication.shared.terminate(nil)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: appState.isRecording)
+        .padding(.bottom, 6)
+    }
+
+    @ViewBuilder
+    private func pillButton(label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 14, weight: .medium))
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+        }
+        .buttonStyle(PillButtonStyle())
     }
 
     @ViewBuilder
@@ -146,33 +186,72 @@ private struct MainPage: View {
 
     @ViewBuilder
     private func menuRow(label: String, shortcut: String?) -> some View {
+        MenuRowContent(label: label, shortcut: shortcut)
+    }
+}
+
+private struct MenuRowContent: View {
+    let label: String
+    let shortcut: String?
+    @Environment(\.menuRowHovered) private var isHovered
+
+    var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
+                .font(.system(size: 14))
             Spacer()
             if let shortcut {
                 Text(shortcut)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(isHovered ? .primary : .secondary)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 5)
+        .frame(height: 32)
         .contentShape(Rectangle())
     }
 }
 
-/// A button style that highlights on hover like native menu items.
+/// Pill-shaped action button matching the Paper mockup.
+private struct PillButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.primary.opacity(isHovered ? 0.6 : 0.4))
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.05))
+            )
+            .onHover { hovering in
+                isHovered = hovering
+            }
+    }
+}
+
+/// Environment key to communicate hover state from button style to row content.
+private struct MenuRowHoveredKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var menuRowHovered: Bool {
+        get { self[MenuRowHoveredKey.self] }
+        set { self[MenuRowHoveredKey.self] = newValue }
+    }
+}
+
+/// A button style with rounded highlight on hover.
 private struct MenuRowButtonStyle: ButtonStyle {
     @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .environment(\.menuRowHovered, isHovered)
             .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? Color.accentColor.opacity(0.2) : Color.clear)
-                    .padding(.horizontal, 4)
+                RoundedRectangle(cornerRadius: 13)
+                    .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)
+                    .padding(.horizontal, 6)
             )
             .onHover { hovering in
                 isHovered = hovering
@@ -377,5 +456,61 @@ private final class ShortcutCaptureNSView: NSView {
             modifiers: modifiers.rawValue
         )
         onCapture?(shortcut)
+    }
+}
+
+// MARK: - Popover Keyboard Shortcuts
+
+/// Intercepts ⌘C (copy prompt) and ⌘⌫ (clear stack) while the popover is open.
+private struct PopoverKeyHandler: NSViewRepresentable {
+    let onCopy: (() -> Void)?
+    let onClear: (() -> Void)?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = KeyHandlerNSView()
+        view.onCopy = onCopy
+        view.onClear = onClear
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? KeyHandlerNSView else { return }
+        view.onCopy = onCopy
+        view.onClear = onClear
+    }
+}
+
+private final class KeyHandlerNSView: NSView {
+    var onCopy: (() -> Void)?
+    var onClear: (() -> Void)?
+    private var monitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil && monitor == nil {
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, event.modifierFlags.contains(.command) else { return event }
+                // ⌘C — keyCode 8
+                if event.keyCode == 8, let action = self.onCopy {
+                    MainActor.assumeIsolated { action() }
+                    return nil
+                }
+                // ⌘⌫ — keyCode 51
+                if event.keyCode == 51, let action = self.onClear {
+                    MainActor.assumeIsolated { action() }
+                    return nil
+                }
+                return event
+            }
+        } else if window == nil, let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    override func removeFromSuperview() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        super.removeFromSuperview()
     }
 }
