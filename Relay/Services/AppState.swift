@@ -137,53 +137,45 @@ final class AppState: ObservableObject {
 
     func populateDemoStack() {
         let items: [ClipboardItem] = [
-            ClipboardItem(contentType: .code, textContent: """
-                func fibonacci(_ n: Int) -> Int {
-                    guard n > 1 else { return n }
-                    return fibonacci(n - 1) + fibonacci(n - 2)
-                }
+            ClipboardItem(contentType: .agentation, textContent: """
+                The page transition feels abrupt — the hero section snaps in without easing. Try a staggered fade-in with 60ms delay between elements and ease-out-cubic over 400ms. The SVG logo also pops in at full scale which feels jarring, consider scaling from 0.9 with opacity.
                 """),
-            ClipboardItem(contentType: .json, textContent: """
-                {"user": {"id": 42, "name": "Ada Lovelace", "roles": ["admin", "editor"]}}
-                """),
-            ClipboardItem(contentType: .terminal, textContent: """
-                $ swift build
-                Building for debugging...
-                [42/42] Linking Relay
-                Build complete! (3.81s)
-                """),
-            ClipboardItem(contentType: .url, textContent: "https://example.com/api/v1/users"),
             ClipboardItem(contentType: .error, textContent: """
-                Traceback (most recent call last):
-                  File "app.py", line 12, in <module>
-                    result = process(data)
-                  File "app.py", line 8, in process
-                    return data["missing_key"]
-                KeyError: 'missing_key'
+                TypeError: Cannot read properties of undefined (reading 'getBBox')
+                    at SVGAnimator.init (src/lib/animator.ts:47:28)
+                    at MountTransition.onMount (src/components/Hero.svelte:12:9)
+                    at flush (node_modules/svelte/internal/index.js:89:5)
                 """),
             ClipboardItem(contentType: .diff, textContent: """
-                diff --git a/Sources/App.swift b/Sources/App.swift
-                @@ -10,3 +10,5 @@ struct App {
-                     let name: String
-                +    let version: Int
-                +    let isEnabled: Bool
-                 }
+                @@ -8,7 +8,11 @@ export function stagger(node, { delay = 60 }) {
+                   return {
+                     duration: 400,
+                -    easing: linear,
+                +    easing: cubicOut,
+                     css: (t) => `
+                -      opacity: ${t}
+                +      opacity: ${t};
+                +      transform: translateY(${(1 - t) * 12}px)
+                     `
                 """),
-            ClipboardItem(contentType: .agentation, textContent: """
-                The sidebar navigation is hard to scan — consider grouping items under section headers and adding icons for quick visual recognition.
+            ClipboardItem(contentType: .file, textContent: "src/components/Hero.svelte"),
+            ClipboardItem(contentType: .image),
+            ClipboardItem(contentType: .terminal, textContent: """
+                $ npm run build
+                vite v5.4.2 building for production...
+                ✓ 43 modules transformed
+                dist/assets/index-Dk4zR91e.js  24.8 kB │ gzip: 8.12 kB
+                ✓ built in 820ms
                 """),
-            ClipboardItem(contentType: .text, textContent: """
-                The quick brown fox jumps over the lazy dog. This is a plain text paragraph that exercises wrapping and truncation in the context stack preview.
-                """),
-            ClipboardItem(contentType: .file, textContent: "/Users/demo/Projects/relay/Sources/App.swift"),
-            ClipboardItem(contentType: .voiceNote, textContent: "Take this code snippet and refactor it to use async await instead of completion handlers"),
+            ClipboardItem(contentType: .voiceNote, textContent: "OK so agentation flagged the page transition as too abrupt and the SVG logo pop-in, I've got the stagger fix with cubic easing in this diff but the animator is throwing a getBBox error on mount, need to defer the SVG init until after the DOM is ready"),
         ]
         for item in items {
             stack.add(item)
         }
 
         // Set a sample transcription with ref markers for demo display
-        let demoTranscription = "Take this code snippet [ref:1] and refactor it to use async await instead of completion handlers. Also check the API response [ref:2] and make sure the build output [ref:3] looks correct. Here's the endpoint [ref:4] that's throwing the error [ref:5] and the diff [ref:6] with the proposed fix."
+        // Chips: Agentation(indigo) Error(red) Diff(green) File(yellow) Image(purple) Terminal(gray)
+        let demoTranscription = "OK so [ref:1] the transition feels way too abrupt and the SVG logo just pops in, I've got this diff [ref:3] with a stagger fix using cubic easing but [ref:2] it's throwing a getBBox error when it tries to mount so I need to update [ref:4] to defer the SVG init until the DOM is ready, here's the current state [ref:5] and yeah [ref:6] build is clean so we're good there"
         frozenTranscription = demoTranscription
         displayTranscription = demoTranscription
     }
