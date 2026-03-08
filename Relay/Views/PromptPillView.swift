@@ -20,33 +20,18 @@ struct PromptPillView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .transition(
-                    .modifier(
-                        active: StopButtonTransition(progress: 1),
-                        identity: StopButtonTransition(progress: 0)
-                    )
-                )
+                .transition(.scaleBlur)
             }
 
             if isRecording {
                 WaveformBarsView(level: audioLevel)
                     .frame(height: 20)
-                    .transition(
-                        .modifier(
-                            active: StopButtonTransition(progress: 1),
-                            identity: StopButtonTransition(progress: 0)
-                        )
-                    )
+                    .transition(.scaleBlur)
             } else {
                 Text("Press \(shortcutDisplay) to start recording")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.tertiary)
-                    .transition(
-                        .modifier(
-                            active: StopButtonTransition(progress: 1),
-                            identity: StopButtonTransition(progress: 0)
-                        )
-                    )
+                    .transition(.scaleBlur)
             }
         }
         .padding(.horizontal, 12)
@@ -64,7 +49,7 @@ struct PromptPillView: View {
     @Environment(\.colorScheme) private var colorScheme
 }
 
-private struct StopButtonTransition: ViewModifier, Animatable {
+private struct ScaleBlurTransition: ViewModifier, Animatable {
     var progress: Double
 
     nonisolated var animatableData: Double {
@@ -77,5 +62,14 @@ private struct StopButtonTransition: ViewModifier, Animatable {
             .scaleEffect(1 - progress * 0.5)
             .opacity(1 - progress)
             .blur(radius: progress * 3)
+    }
+}
+
+private extension AnyTransition {
+    static var scaleBlur: AnyTransition {
+        .modifier(
+            active: ScaleBlurTransition(progress: 1),
+            identity: ScaleBlurTransition(progress: 0)
+        )
     }
 }

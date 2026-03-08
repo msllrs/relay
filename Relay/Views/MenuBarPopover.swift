@@ -43,10 +43,7 @@ struct MenuBarPopover: View {
 private struct MainPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
-
-    private var shortcutDisplay: String {
-        KeyboardShortcutModel.load().displayString
-    }
+    @State private var shortcutDisplay = KeyboardShortcutModel.load().displayString
 
     private var hasContent: Bool {
         !appState.stack.isEmpty || !appState.displayTranscription.isEmpty
@@ -100,10 +97,9 @@ private struct MainPage: View {
                 .transaction { $0.animation = nil }
             }
 
-            // Footer: divider + menu items (hidden while recording)
+            // Footer: divider + action buttons + menu items
             FooterView(
                 hasContent: hasContent,
-                isRecording: appState.isRecording,
                 showCopiedConfirmation: appState.showCopiedConfirmation,
                 showSettings: $showSettings,
                 onCopy: { appState.copyPromptToClipboard() },
@@ -119,11 +115,9 @@ private struct MainPage: View {
 
 // MARK: - Footer
 
-/// Footer that smoothly animates height + opacity/blur when recording toggles.
-/// Always present in the layout to prevent content above from jumping.
+/// Always-visible footer with action buttons and menu items.
 private struct FooterView: View {
     let hasContent: Bool
-    let isRecording: Bool
     let showCopiedConfirmation: Bool
     @Binding var showSettings: Bool
     var onCopy: () -> Void
