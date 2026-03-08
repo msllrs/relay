@@ -6,7 +6,6 @@ import Foundation
 final class AppState: ObservableObject {
     @Published var stack = ContextStack()
     @Published var isMonitoring = false
-    @Published var taskIntent = ""
     @Published var showCopiedConfirmation = false
     @Published var clearStackOnCopy: Bool {
         didSet { UserDefaults.standard.set(clearStackOnCopy, forKey: "clearStackOnCopy") }
@@ -40,6 +39,11 @@ final class AppState: ObservableObject {
     }
     @Published var itemJustAdded = false
     @Published var isRecording = false
+    @Published var displayTranscription = ""
+    let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
+
+    /// Accumulated transcription text from previous dictation sessions (before the current one).
+    private var frozenTranscription = ""
 
     /// Number of non-voiceNote items in the stack when a dictation session started (for clean dictation).
     private var clipboardItemCountAtSessionStart = 0
@@ -81,9 +85,14 @@ final class AppState: ObservableObject {
         }
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .xml
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
-        self.selectedInputDeviceID = storedDeviceID
-        if storedDeviceID != 0 {
-            voiceManager.inputDeviceID = storedDeviceID
+        // Reset to system default if the stored device is no longer available
+        if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
+            self.selectedInputDeviceID = 0
+        } else {
+            self.selectedInputDeviceID = storedDeviceID
+            if storedDeviceID != 0 {
+                voiceManager.inputDeviceID = storedDeviceID
+            }
         }
         clipboardMonitor = ClipboardMonitor(appState: self)
         hotkeyManager = HotkeyManager(appState: self)
@@ -102,6 +111,11 @@ final class AppState: ObservableObject {
         voiceManager.$isRecording
             .assign(to: &$isRecording)
 
+        // Rebuild display transcription as partial results stream in
+        voiceManager.$partialTranscription
+            .sink { [weak self] _ in self?.rebuildDisplayTranscription() }
+            .store(in: &cancellables)
+
         // Stop Esc/keyUp monitors when recording ends
         voiceManager.$isRecording
             .dropFirst()
@@ -112,9 +126,64 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
-        if alwaysOnMonitoring {
+        if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" {
+            populateDemoStack()
+        } else if alwaysOnMonitoring {
             startMonitoring()
         }
+    }
+
+    func populateDemoStack() {
+        let items: [ClipboardItem] = [
+            ClipboardItem(contentType: .code, textContent: """
+                func fibonacci(_ n: Int) -> Int {
+                    guard n > 1 else { return n }
+                    return fibonacci(n - 1) + fibonacci(n - 2)
+                }
+                """),
+            ClipboardItem(contentType: .json, textContent: """
+                {"user": {"id": 42, "name": "Ada Lovelace", "roles": ["admin", "editor"]}}
+                """),
+            ClipboardItem(contentType: .terminal, textContent: """
+                $ swift build
+                Building for debugging...
+                [42/42] Linking Relay
+                Build complete! (3.81s)
+                """),
+            ClipboardItem(contentType: .url, textContent: "https://example.com/api/v1/users"),
+            ClipboardItem(contentType: .error, textContent: """
+                Traceback (most recent call last):
+                  File "app.py", line 12, in <module>
+                    result = process(data)
+                  File "app.py", line 8, in process
+                    return data["missing_key"]
+                KeyError: 'missing_key'
+                """),
+            ClipboardItem(contentType: .diff, textContent: """
+                diff --git a/Sources/App.swift b/Sources/App.swift
+                @@ -10,3 +10,5 @@ struct App {
+                     let name: String
+                +    let version: Int
+                +    let isEnabled: Bool
+                 }
+                """),
+            ClipboardItem(contentType: .agentation, textContent: """
+                The sidebar navigation is hard to scan — consider grouping items under section headers and adding icons for quick visual recognition.
+                """),
+            ClipboardItem(contentType: .text, textContent: """
+                The quick brown fox jumps over the lazy dog. This is a plain text paragraph that exercises wrapping and truncation in the context stack preview.
+                """),
+            ClipboardItem(contentType: .file, textContent: "/Users/demo/Projects/relay/Sources/App.swift"),
+            ClipboardItem(contentType: .voiceNote, textContent: "Take this code snippet and refactor it to use async await instead of completion handlers"),
+        ]
+        for item in items {
+            stack.add(item)
+        }
+
+        // Set a sample transcription with ref markers for demo display
+        let demoTranscription = "Take this code snippet [ref:1] and refactor it to use async await instead of completion handlers. Also check the API response [ref:2] and make sure the build output [ref:3] looks correct. Here's the endpoint [ref:4] that's throwing the error [ref:5] and the diff [ref:6] with the proposed fix."
+        frozenTranscription = demoTranscription
+        displayTranscription = demoTranscription
     }
 
     func startMonitoring() {
@@ -168,7 +237,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func finishDictationAndStop() {
+    func finishDictationAndStop() {
         hotkeyManager?.stopEscMonitor()
         hotkeyManager?.stopKeyUpMonitor()
         let itemCountBefore = clipboardItemCountAtSessionStart
@@ -185,25 +254,29 @@ final class AppState: ObservableObject {
             if isPushToTalk && self.cleanDictation && currentClipboardCount == itemCountBefore {
                 // Remove the placeholder since we're copying raw
                 if let id = voiceNoteID { self.stack.remove(id: id) }
+                self.frozenTranscription = ""
+                self.displayTranscription = ""
                 self.copyRawTranscription(transcription)
             } else if let id = voiceNoteID {
                 let markedText = self.insertRefMarkers(into: transcription, refs: refs)
                 self.stack.update(id: id, textContent: markedText)
-                self.autoCopyIfVoiceOnly()
+                self.freezeCurrentSession(markedText)
             } else {
                 let markedText = self.insertRefMarkers(into: transcription, refs: refs)
                 let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
                 self.stack.add(item)
-                self.autoCopyIfVoiceOnly()
+                self.freezeCurrentSession(markedText)
             }
         }
         stopMonitoring()
     }
 
-    private func cancelDictation() {
+    func cancelDictation() {
         hotkeyManager?.stopEscMonitor()
         hotkeyManager?.stopKeyUpMonitor()
         pendingRefs = []
+        // Restore display to frozen text (discard current session only)
+        displayTranscription = frozenTranscription
         if let id = activeVoiceNoteID {
             stack.remove(id: id)
             activeVoiceNoteID = nil
@@ -277,30 +350,9 @@ final class AppState: ObservableObject {
         return text.distance(from: text.startIndex, to: end)
     }
 
-    /// Called by VoiceNoteButton when the user taps to start recording.
-    func startVoiceNote() {
-        let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
-        activeVoiceNoteID = placeholder.id
-        stack.add(placeholder)
-    }
-
-    /// Called by VoiceNoteButton when transcription completes.
-    func finishVoiceNote(transcription: String) {
-        if let id = activeVoiceNoteID {
-            stack.update(id: id, textContent: transcription)
-            activeVoiceNoteID = nil
-        } else {
-            let item = ClipboardItem(contentType: .voiceNote, textContent: transcription)
-            stack.add(item)
-        }
-        autoCopyIfVoiceOnly()
-    }
-
-    /// If the stack is just a single voice note with no task intent, auto-copy raw text to clipboard.
+    /// If the stack is just a single voice note, auto-copy raw text to clipboard.
     private func autoCopyIfVoiceOnly() {
-        let hasTask = !taskIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        guard !hasTask,
-              stack.items.count == 1,
+        guard stack.items.count == 1,
               stack.items[0].contentType == .voiceNote,
               let text = stack.items[0].textContent, !text.isEmpty else { return }
         let pasteboard = NSPasteboard.general
@@ -308,6 +360,8 @@ final class AppState: ObservableObject {
         pasteboard.setString(text, forType: .string)
         lastWrittenChangeCount = pasteboard.changeCount
         stack.clear()
+        frozenTranscription = ""
+        displayTranscription = ""
         showCopiedConfirmation = true
         Task {
             try? await Task.sleep(for: .seconds(1.5))
@@ -323,28 +377,106 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Freeze the completed session text into the accumulated transcription.
+    private func freezeCurrentSession(_ markedText: String) {
+        if frozenTranscription.isEmpty {
+            frozenTranscription = markedText
+        } else {
+            frozenTranscription += " " + markedText
+        }
+        displayTranscription = frozenTranscription
+        autoCopyIfVoiceOnly()
+    }
+
     /// Record a reference marker for a clipboard item captured during dictation.
     func recordRefMarker(for itemID: UUID) {
         guard voiceManager.isRecording else { return }
         let offset = voiceManager.partialTranscription.count
         pendingRefs.append(PendingRef(itemID: itemID, charOffset: offset))
+        rebuildDisplayTranscription()
+    }
+
+    /// Rebuild `displayTranscription` by splicing pending ref markers into live partial text.
+    private func rebuildDisplayTranscription() {
+        guard voiceManager.isRecording else { return }
+        let currentSession = insertRefMarkers(
+            into: voiceManager.partialTranscription,
+            refs: pendingRefs
+        )
+        if frozenTranscription.isEmpty {
+            displayTranscription = currentSession
+        } else {
+            displayTranscription = frozenTranscription + " " + currentSession
+        }
+    }
+
+    /// Remove a ref by its 1-based index: strip the marker from transcription text,
+    /// remove the stack item, and renumber remaining refs.
+    func removeRef(_ refIndex: Int) {
+        let nonVoiceItems = stack.items.filter { $0.contentType != .voiceNote }
+        guard refIndex >= 1, refIndex <= nonVoiceItems.count else { return }
+        let itemToRemove = nonVoiceItems[refIndex - 1]
+        stack.remove(id: itemToRemove.id)
+
+        // Strip the [ref:N] marker and renumber higher refs
+        frozenTranscription = stripAndRenumberRef(in: frozenTranscription, removedIndex: refIndex)
+        // Also update voice note textContent that contains ref markers
+        for item in stack.items where item.contentType == .voiceNote {
+            if let text = item.textContent {
+                stack.update(id: item.id, textContent: stripAndRenumberRef(in: text, removedIndex: refIndex))
+            }
+        }
+        displayTranscription = frozenTranscription
+    }
+
+    /// Remove `[ref:N]` for the given index and decrement all higher ref numbers.
+    private func stripAndRenumberRef(in text: String, removedIndex: Int) -> String {
+        // Single-pass replacement: match any [ref:N], remove if N == removedIndex, decrement if N > removedIndex
+        let pattern = /\ ?\[ref:(\d+)\]/
+        var result = ""
+        var remaining = text[...]
+
+        while let match = remaining.firstMatch(of: pattern) {
+            // Append text before the match
+            result += remaining[remaining.startIndex..<match.range.lowerBound]
+
+            if let n = Int(match.output.1) {
+                if n == removedIndex {
+                    // Strip this ref entirely
+                } else if n > removedIndex {
+                    result += " [ref:\(n - 1)]"
+                } else {
+                    result += String(remaining[match.range])
+                }
+            }
+
+            remaining = remaining[match.range.upperBound...]
+        }
+        // Append any remaining text
+        result += remaining
+        return result
+    }
+
+    func clearAll() {
+        stack.clear()
+        frozenTranscription = ""
+        displayTranscription = ""
     }
 
     func copyPromptToClipboard() {
-        // If the only item is a voice note with no task intent, just copy the raw text
+        // If the only item is a voice note, just copy the raw text
         let onlyVoiceNote = stack.items.count == 1
             && stack.items[0].contentType == .voiceNote
-            && taskIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let prompt = onlyVoiceNote
             ? (stack.items[0].textContent ?? "")
-            : PromptComposer.compose(task: taskIntent, items: stack.items, format: promptFormat)
+            : PromptComposer.compose(items: stack.items, format: promptFormat)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(prompt, forType: .string)
         lastWrittenChangeCount = pasteboard.changeCount
 
         if clearStackOnCopy {
-            stack.clear()
+            clearAll()
         }
 
         showCopiedConfirmation = true
