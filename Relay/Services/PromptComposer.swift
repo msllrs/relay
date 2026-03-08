@@ -15,22 +15,17 @@ enum PromptFormat: String, CaseIterable, Identifiable {
 }
 
 enum PromptComposer {
-    static func compose(task: String, items: [ClipboardItem], format: PromptFormat = .xml) -> String {
+    static func compose(items: [ClipboardItem], format: PromptFormat = .xml) -> String {
         switch format {
-        case .xml: composeXML(task: task, items: items)
-        case .markdown: composeMarkdown(task: task, items: items)
+        case .xml: composeXML(items: items)
+        case .markdown: composeMarkdown(items: items)
         }
     }
 
     // MARK: - XML
 
-    private static func composeXML(task: String, items: [ClipboardItem]) -> String {
+    private static func composeXML(items: [ClipboardItem]) -> String {
         var parts: [String] = []
-
-        let trimmedTask = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTask.isEmpty {
-            parts.append("<task>\(trimmedTask)</task>")
-        }
 
         if !items.isEmpty {
             var contextParts: [String] = []
@@ -52,13 +47,8 @@ enum PromptComposer {
 
     // MARK: - Markdown
 
-    private static func composeMarkdown(task: String, items: [ClipboardItem]) -> String {
+    private static func composeMarkdown(items: [ClipboardItem]) -> String {
         var parts: [String] = []
-
-        let trimmedTask = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTask.isEmpty {
-            parts.append("## Task\n\(trimmedTask)")
-        }
 
         if !items.isEmpty {
             var contextParts: [String] = []
@@ -82,13 +72,15 @@ enum PromptComposer {
 
     private static func markdownContent(for item: ClipboardItem, raw: String) -> String {
         switch item.contentType {
-        case .code, .json, .terminal:
+        case .code, .json, .terminal, .error, .diff:
             return "```\n\(raw)\n```"
         case .image:
             return "![image](\(raw.replacingOccurrences(of: "[image: ", with: "").replacingOccurrences(of: "]", with: "")))"
         case .file:
             return "`\(raw)`"
         case .url:
+            return raw
+        case .agentation:
             return raw
         case .text, .voiceNote:
             return raw
