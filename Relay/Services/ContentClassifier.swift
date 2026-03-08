@@ -16,19 +16,21 @@ enum ContentClassifier {
         // 3. Agentation page annotations
         if isAnnotation(trimmed) { return .agentation }
 
+        let lines = trimmed.components(separatedBy: .newlines)
+
         // 4. Diff / patch
-        if isDiff(trimmed) { return .diff }
+        if isDiff(lines) { return .diff }
 
         // 5. Error / stack trace
-        if isError(trimmed) { return .error }
+        if isError(lines) { return .error }
 
-        // 5. Terminal output
-        if isTerminal(trimmed) { return .terminal }
+        // 6. Terminal output
+        if isTerminal(trimmed, lines: lines) { return .terminal }
 
-        // 6. Code
-        if isCode(trimmed) { return .code }
+        // 7. Code
+        if isCode(lines) { return .code }
 
-        // 7. Fallback
+        // 8. Fallback
         return .text
     }
 
@@ -63,8 +65,7 @@ enum ContentClassifier {
         return false
     }
 
-    private static func isDiff(_ text: String) -> Bool {
-        let lines = text.components(separatedBy: .newlines)
+    private static func isDiff(_ lines: [String]) -> Bool {
         var hasHunks = false
         var indicators = 0
 
@@ -79,8 +80,7 @@ enum ContentClassifier {
         return indicators >= 2
     }
 
-    private static func isError(_ text: String) -> Bool {
-        let lines = text.components(separatedBy: .newlines)
+    private static func isError(_ lines: [String]) -> Bool {
         var hits = 0
 
         for line in lines {
@@ -101,8 +101,7 @@ enum ContentClassifier {
         return hits >= 2
     }
 
-    private static func isTerminal(_ text: String) -> Bool {
-        let lines = text.components(separatedBy: .newlines)
+    private static func isTerminal(_ text: String, lines: [String]) -> Bool {
         let promptLines = lines.filter { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             return trimmed.hasPrefix("$ ") || trimmed.hasPrefix("% ") || trimmed.hasPrefix("> ")
@@ -113,9 +112,7 @@ enum ContentClassifier {
         return false
     }
 
-    private static func isCode(_ text: String) -> Bool {
-        let lines = text.components(separatedBy: .newlines)
-
+    private static func isCode(_ lines: [String]) -> Bool {
         // Check for common code keywords
         let codeKeywords = [
             "func ", "def ", "class ", "import ", "from ", "const ", "let ", "var ",

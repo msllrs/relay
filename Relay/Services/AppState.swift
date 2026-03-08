@@ -280,11 +280,18 @@ final class AppState: ObservableObject {
     }
 
     private func copyRawTranscription(_ text: String) {
+        writeToClipboard(text)
+        flashCopiedConfirmation()
+    }
+
+    private func writeToClipboard(_ text: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         lastWrittenChangeCount = pasteboard.changeCount
+    }
 
+    private func flashCopiedConfirmation() {
         showCopiedConfirmation = true
         Task {
             try? await Task.sleep(for: .seconds(1.5))
@@ -349,18 +356,11 @@ final class AppState: ObservableObject {
         guard stack.items.count == 1,
               stack.items[0].contentType == .voiceNote,
               let text = stack.items[0].textContent, !text.isEmpty else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        lastWrittenChangeCount = pasteboard.changeCount
+        writeToClipboard(text)
         stack.clear()
         frozenTranscription = ""
         displayTranscription = ""
-        showCopiedConfirmation = true
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            showCopiedConfirmation = false
-        }
+        flashCopiedConfirmation()
     }
 
     func notifyItemAdded() {
@@ -479,19 +479,12 @@ final class AppState: ObservableObject {
         let prompt = onlyVoiceNote
             ? (stack.items[0].textContent ?? "")
             : PromptComposer.compose(items: stack.items, format: promptFormat)
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(prompt, forType: .string)
-        lastWrittenChangeCount = pasteboard.changeCount
+        writeToClipboard(prompt)
 
         if clearStackOnCopy {
             clearAll()
         }
 
-        showCopiedConfirmation = true
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            showCopiedConfirmation = false
-        }
+        flashCopiedConfirmation()
     }
 }
