@@ -5,6 +5,9 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
     case json
     case terminal
     case url
+    case error
+    case diff
+    case agentation
     case text
     case image
     case file
@@ -18,6 +21,9 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .json: "JSON"
         case .terminal: "Terminal"
         case .url: "URL"
+        case .error: "Error"
+        case .diff: "Diff"
+        case .agentation: "Agentation"
         case .text: "Text"
         case .image: "Image"
         case .file: "File"
@@ -31,6 +37,9 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .json: "curlybraces"
         case .terminal: "terminal"
         case .url: "link"
+        case .error: "exclamationmark.triangle"
+        case .diff: "plus.forwardslash.minus"
+        case .agentation: "bubble.left.and.text.bubble.right"
         case .text: "doc.text"
         case .image: "photo"
         case .file: "doc"
