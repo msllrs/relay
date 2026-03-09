@@ -19,7 +19,7 @@ struct WaveformBarsView: View {
                     let fraction = minBarFraction + (1 - minBarFraction) * normalized * seed
                     let barHeight = fraction * Double(geo.size.height)
                     RoundedRectangle(cornerRadius: barWidth / 2)
-                        .fill(Color.primary.opacity(0.16))
+                        .fill(Color.primary.opacity(0.16 + 0.34 * normalized * seed))
                         .frame(width: barWidth, height: barHeight)
                         .frame(maxHeight: .infinity, alignment: .center)
                 }
