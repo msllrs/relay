@@ -20,7 +20,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 
 ## Install
 
-Download the latest DMG from [Releases](https://github.com/msllrs/relay/releases), drag to Applications, then right-click → Open on first launch (ad-hoc signed).
+Download the latest DMG from [Releases](https://github.com/msllrs/relay/releases) and drag to Applications. On first launch, macOS will block the app — go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
 
 ## Build from source
 
