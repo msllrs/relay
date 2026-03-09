@@ -6,11 +6,9 @@ A macOS menu bar app that lets you build rich LLM prompts by combining clipboard
 
 ## What it does
 
-Copy things — code, URLs, files, text — and Relay collects them in a context stack. Drop in screenshots, files, and folders for additional context. Record a voice note to describe what you want. Hit compose and get a structured prompt in Markdown ready to paste into any LLM.
+As you dictate, clipboard captures are woven inline with your transcription, landing exactly where you referenced them. No copy-paste choreography, just talk and the context assembles itself into a structured Markdown prompt ready to paste into any LLM.
 
-As you dictate, Relay weaves your clipboard captures inline with your transcription — so when you say "fix this error" right after copying a stack trace, the error lands exactly where you referenced it. No copy-paste choreography, just talk and the context assembles itself.
-
-<img src="Resources/screenshot.png" alt="Relay popover" width="420">
+<img src="Resources/screenshot.png" alt="Relay popover" width="560">
 
 ## Features
 
