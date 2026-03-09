@@ -1,24 +1,37 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "Building Relay..."
-swift build
+# Parse flags
+CONFIG="debug"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --release) CONFIG="release"; shift ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+# Version info
+VERSION=$(cat VERSION)
+BUILD_NUMBER=$(git rev-list --count HEAD)
+
+echo "Building Relay v${VERSION} (build ${BUILD_NUMBER}) [${CONFIG}]..."
+swift build -c "$CONFIG"
 
 APP_DIR=".build/Relay.app/Contents"
 mkdir -p "$APP_DIR/MacOS"
 mkdir -p "$APP_DIR/Resources"
 
-cp .build/debug/Relay "$APP_DIR/MacOS/Relay"
+cp ".build/${CONFIG}/Relay" "$APP_DIR/MacOS/Relay"
 
 # Copy asset bundle if it exists
-if [ -d ".build/debug/Relay_Relay.bundle" ]; then
-    cp -R ".build/debug/Relay_Relay.bundle" "$APP_DIR/Resources/"
+if [ -d ".build/${CONFIG}/Relay_Relay.bundle" ]; then
+    cp -R ".build/${CONFIG}/Relay_Relay.bundle" "$APP_DIR/Resources/"
 fi
 
 # Copy app icon
 cp Relay/Resources/AppIcon.icns "$APP_DIR/Resources/AppIcon.icns"
 
-cat > "$APP_DIR/Info.plist" << 'PLIST'
+cat > "$APP_DIR/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -29,6 +42,10 @@ cat > "$APP_DIR/Info.plist" << 'PLIST'
 	<string>Relay</string>
 	<key>CFBundleExecutable</key>
 	<string>Relay</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${VERSION}</string>
+	<key>CFBundleVersion</key>
+	<string>${BUILD_NUMBER}</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
@@ -57,5 +74,5 @@ ENT
 
 codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
 
-echo "Built .build/Relay.app"
+echo "Built .build/Relay.app (v${VERSION}, build ${BUILD_NUMBER}, ${CONFIG})"
 echo "Run with: open .build/Relay.app"
