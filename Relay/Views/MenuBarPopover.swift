@@ -124,6 +124,7 @@ private struct MainPage: View {
                 onCopy: { appState.copyPromptToClipboard() },
                 onClear: { appState.clearAll() }
             )
+            .fixedSize(horizontal: false, vertical: true)
         }
         .background(PopoverKeyHandler(actions: {
             var actions: [Int: () -> Void] = [

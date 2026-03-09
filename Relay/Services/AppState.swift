@@ -42,6 +42,8 @@ final class AppState: ObservableObject {
     @Published var isRecording = false
     @Published var displayTranscription = ""
     let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
+    private var demoScenarioIndex = 0
+    private static let demoScenarioCount = 2
 
     /// Accumulated transcription text from previous dictation sessions (before the current one).
     private var frozenTranscription = ""
@@ -136,6 +138,17 @@ final class AppState: ObservableObject {
     }
 
     func populateDemoStack() {
+        let scenario = demoScenarioIndex % Self.demoScenarioCount
+        demoScenarioIndex += 1
+
+        switch scenario {
+        case 0: populateDemoShort()
+        case 1: populateDemoLong()
+        default: break
+        }
+    }
+
+    private func populateDemoShort() {
         let items: [ClipboardItem] = [
             ClipboardItem(contentType: .agentation, textContent: """
                 The page transition feels abrupt — the hero section snaps in without easing. Try a staggered fade-in with 60ms delay between elements and ease-out-cubic over 400ms. The SVG logo also pops in at full scale which feels jarring, consider scaling from 0.9 with opacity.
@@ -173,9 +186,63 @@ final class AppState: ObservableObject {
             stack.add(item)
         }
 
-        // Set a sample transcription with ref markers for demo display
-        // Chips: Agentation(indigo) Error(red) Diff(green) File(yellow) Image(purple) Terminal(gray)
         let demoTranscription = "OK so [ref:1] the transition feels way too abrupt and the SVG logo just pops in, I've got this diff [ref:3] with a stagger fix using cubic easing but [ref:2] it's throwing a getBBox error when it tries to mount so I need to update [ref:4] to defer the SVG init until the DOM is ready, here's the current state [ref:5] and yeah [ref:6] build is clean so we're good there"
+        frozenTranscription = demoTranscription
+        displayTranscription = demoTranscription
+    }
+
+    private func populateDemoLong() {
+        let items: [ClipboardItem] = [
+            ClipboardItem(contentType: .code, textContent: """
+                func handleAuth(_ request: Request) async throws -> Response {
+                    guard let token = request.headers.bearerAuthorization else {
+                        throw Abort(.unauthorized)
+                    }
+                    let payload = try request.jwt.verify(token.token, as: UserPayload.self)
+                    let user = try await User.find(payload.userID, on: request.db)
+                    return try await user.toResponse()
+                }
+                """),
+            ClipboardItem(contentType: .error, textContent: """
+                FATAL: password authentication failed for user "relay_prod"
+                    at Connection.parseE (node_modules/pg/lib/connection.js:614:13)
+                    at Connection.parseMessage (node_modules/pg/lib/connection.js:413:19)
+                """),
+            ClipboardItem(contentType: .url, textContent: "https://developer.apple.com/documentation/authenticationservices"),
+            ClipboardItem(contentType: .file, textContent: "Sources/App/Controllers/AuthController.swift"),
+            ClipboardItem(contentType: .json, textContent: """
+                {
+                  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+                  "token_type": "bearer",
+                  "expires_in": 3600,
+                  "refresh_token": "dGhpcyBpcyBhIHJlZnJl..."
+                }
+                """),
+            ClipboardItem(contentType: .diff, textContent: """
+                @@ -12,6 +12,8 @@ struct AuthController {
+                     func login(_ req: Request) async throws -> TokenResponse {
+                +        let rateLimiter = req.application.rateLimiter
+                +        try await rateLimiter.check(req.remoteAddress)
+                         let credentials = try req.content.decode(LoginRequest.self)
+                         guard let user = try await User.query(on: req.db)
+                """),
+            ClipboardItem(contentType: .terminal, textContent: """
+                $ swift test --filter AuthTests
+                Test Suite 'AuthTests' started at 2026-03-09 10:42:18
+                Test Case 'testLoginSuccess' passed (0.234 seconds)
+                Test Case 'testLoginInvalidPassword' passed (0.112 seconds)
+                Test Case 'testTokenRefresh' FAILED (0.089 seconds)
+                Test Case 'testRateLimiting' passed (1.203 seconds)
+                """),
+            ClipboardItem(contentType: .image),
+            ClipboardItem(contentType: .text, textContent: "Need to rotate the prod DB credentials before deploying the auth changes — current password was last rotated 90+ days ago."),
+            ClipboardItem(contentType: .voiceNote, textContent: "Walking through the auth refactor with rate limiting and JWT refresh token rotation"),
+        ]
+        for item in items {
+            stack.add(item)
+        }
+
+        let demoTranscription = "Alright so I'm working on this auth refactor [ref:4] and the main issue is the login handler [ref:1] needs rate limiting before we go to prod, I've added that in this diff [ref:6] with the rate limiter middleware. But we're also hitting [ref:2] this postgres auth failure in staging which is a separate issue, [ref:9] we need to rotate those credentials before deploying. I've been reading through [ref:3] the Apple auth services docs for the SSO integration that's coming next sprint. The JWT response shape [ref:5] looks good but [ref:7] the token refresh test is failing, need to dig into that. Here's the current test output and [ref:8] a screenshot of the auth flow diagram I sketched out. Overall the rate limiting and credential rotation are the blockers, the refresh token bug is lower priority but should be fixed before merge. Actually let me walk through the flow in more detail. So when a user hits the login endpoint [ref:1] we first check the rate limiter [ref:6] which tracks attempts per IP address using a sliding window of 60 seconds. If they exceed 10 attempts we return a 429 with a retry-after header. Then we validate credentials against the database and if everything checks out we mint a new JWT [ref:5] with a 1 hour expiry plus a refresh token that lasts 30 days. The refresh flow is where things get tricky because [ref:7] the test expects the old refresh token to be invalidated after use but right now we're not doing token rotation properly so the same refresh token works multiple times which is a security issue. I need to add a token family tracking mechanism so we can detect reuse and invalidate the whole family if someone tries to replay an old token. Also [ref:3] the Apple SSO integration is going to need a separate auth provider abstraction because right now everything assumes username and password but with Sign in with Apple we get an identity token that we need to verify against Apple's public keys and then create or link a local user account"
         frozenTranscription = demoTranscription
         displayTranscription = demoTranscription
     }
