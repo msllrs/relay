@@ -430,6 +430,13 @@ final class AppState: ObservableObject {
         flashCopiedConfirmation()
     }
 
+    /// Add an item to the stack, record a ref marker if recording, and flash the badge.
+    func addItem(_ item: ClipboardItem) {
+        stack.add(item)
+        recordRefMarker(for: item.id)
+        notifyItemAdded()
+    }
+
     func notifyItemAdded() {
         itemJustAdded = true
         Task {

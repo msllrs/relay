@@ -28,45 +28,12 @@ final class ClipboardMonitor {
 
     /// Grab current pasteboard content immediately, skipping the change-count guard.
     func captureCurrentClipboard() {
-        guard let appState else { return }
+        guard appState != nil else { return }
 
         let pasteboard = NSPasteboard.general
         lastChangeCount = pasteboard.changeCount
 
-        // Try to read file URLs first (Finder copies include icon TIFF too)
-        if let fileURLs = readFileURLs(from: pasteboard) {
-            for url in fileURLs {
-                let item = itemForFileURL(url)
-                if !isDuplicateOfLastItem(item) {
-                    appState.stack.add(item)
-                    appState.recordRefMarker(for: item.id)
-                    appState.notifyItemAdded()
-                }
-            }
-            return
-        }
-
-        if let imageData = readImage(from: pasteboard),
-           let path = saveImageToTemp(imageData) {
-            let item = ClipboardItem(contentType: .image, imagePath: path)
-            if !isDuplicateOfLastItem(item) {
-                appState.stack.add(item)
-                appState.recordRefMarker(for: item.id)
-                appState.notifyItemAdded()
-            }
-            return
-        }
-
-        if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            let contentType = ContentClassifier.classify(text: text)
-            let truncatedText = truncateIfNeeded(text)
-            let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
-            if !isDuplicateOfLastItem(item) {
-                appState.stack.add(item)
-                appState.recordRefMarker(for: item.id)
-                appState.notifyItemAdded()
-            }
-        }
+        ingestPasteboard(pasteboard)
     }
 
     private func checkClipboard() {
@@ -84,14 +51,19 @@ final class ClipboardMonitor {
             return
         }
 
+        ingestPasteboard(pasteboard)
+    }
+
+    /// Shared pasteboard processing: read files, images, or text and add to stack.
+    private func ingestPasteboard(_ pasteboard: NSPasteboard) {
+        guard let appState else { return }
+
         // Try to read file URLs first (Finder copies include icon TIFF too)
         if let fileURLs = readFileURLs(from: pasteboard) {
             for url in fileURLs {
-                let item = itemForFileURL(url)
+                let item = ClipboardItem.fromFileURL(url)
                 if !isDuplicateOfLastItem(item) {
-                    appState.stack.add(item)
-                    appState.recordRefMarker(for: item.id)
-                    appState.notifyItemAdded()
+                    appState.addItem(item)
                 }
             }
             return
@@ -102,9 +74,7 @@ final class ClipboardMonitor {
            let path = saveImageToTemp(imageData) {
             let item = ClipboardItem(contentType: .image, imagePath: path)
             if !isDuplicateOfLastItem(item) {
-                appState.stack.add(item)
-                appState.recordRefMarker(for: item.id)
-                appState.notifyItemAdded()
+                appState.addItem(item)
             }
             return
         }
@@ -115,9 +85,7 @@ final class ClipboardMonitor {
             let truncatedText = truncateIfNeeded(text)
             let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
             if !isDuplicateOfLastItem(item) {
-                appState.stack.add(item)
-                appState.recordRefMarker(for: item.id)
-                appState.notifyItemAdded()
+                appState.addItem(item)
             }
         }
     }
@@ -141,10 +109,6 @@ final class ClipboardMonitor {
         }
 
         return false
-    }
-
-    private func itemForFileURL(_ url: URL) -> ClipboardItem {
-        ClipboardItem.fromFileURL(url)
     }
 
     private func readFileURLs(from pasteboard: NSPasteboard) -> [URL]? {

@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var cancellables: [Any] = []
     private var lastIconState: MenuBarIconBuilder.IconState?
     private var dotLayer: CALayer?
+    private var dotGeneration = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -126,9 +127,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             disappear.isRemovedOnCompletion = false
             dot.add(disappear, forKey: "dotDisappear")
 
+            dotGeneration += 1
+            let expectedGeneration = dotGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-                self?.dotLayer?.removeFromSuperlayer()
-                self?.dotLayer = nil
+                guard let self, self.dotGeneration == expectedGeneration else { return }
+                self.dotLayer?.removeFromSuperlayer()
+                self.dotLayer = nil
             }
         }
     }
@@ -201,10 +205,7 @@ private final class StatusItemDropView: NSView {
         MainActor.assumeIsolated {
             guard let appState else { return }
             for url in urls {
-                let item = ClipboardItem.fromFileURL(url)
-                appState.stack.add(item)
-                appState.recordRefMarker(for: item.id)
-                appState.notifyItemAdded()
+                appState.addItem(ClipboardItem.fromFileURL(url))
             }
             openPopover()
         }

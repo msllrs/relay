@@ -42,10 +42,7 @@ struct MenuBarPopover: View {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url, url.isFileURL else { return }
                     DispatchQueue.main.async {
-                        let item = ClipboardItem.fromFileURL(url)
-                        appState.stack.add(item)
-                        appState.recordRefMarker(for: item.id)
-                        appState.notifyItemAdded()
+                        appState.addItem(ClipboardItem.fromFileURL(url))
                     }
                 }
                 handled = true
@@ -221,6 +218,14 @@ private struct FooterButtonsView: View {
     var onCopy: () -> Void
     var onClear: () -> Void
 
+    private static let copiedColor = Color(nsColor: NSColor(name: nil) { appearance in
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            NSColor(red: 0, green: 0.788, blue: 0.471, alpha: 1)
+        } else {
+            NSColor(red: 0, green: 0.60, blue: 0.36, alpha: 1)
+        }
+    })
+
     /// Internal animated state, driven via `withAnimation` to be immune to parent transaction overrides.
     @State private var collapsed = false
     @State private var clearHovered = false
@@ -265,7 +270,7 @@ private struct FooterButtonsView: View {
                         .opacity(collapsed ? 0 : 1)
                         .blur(radius: collapsed ? 4 : 0)
                     Text("Copied!")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Self.copiedColor)
                         .scaleEffect(collapsed ? 1 : 0.5)
                         .opacity(collapsed ? 1 : 0)
                         .blur(radius: collapsed ? 0 : 4)
