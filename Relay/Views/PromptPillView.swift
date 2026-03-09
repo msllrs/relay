@@ -4,7 +4,10 @@ struct PromptPillView: View {
     let isRecording: Bool
     let audioLevel: Float
     let shortcutDisplay: String
+    var onStart: () -> Void
     var onStop: () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -39,9 +42,14 @@ struct PromptPillView: View {
         .frame(height: 36)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(isRecording ? 0.08 : 0.05))
+                .fill(Color.primary.opacity(isRecording ? 0.08 : isHovered ? 0.08 : 0.05))
                 .transaction { $0.animation = nil }
         )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            if !isRecording { onStart() }
+        }
         .padding(.horizontal, 16)
         .animation(.easeInOut(duration: 0.25), value: isRecording)
     }
@@ -73,3 +81,4 @@ private extension AnyTransition {
         )
     }
 }
+
