@@ -72,21 +72,20 @@ final class AppState: ObservableObject {
     init() {
         self.clearStackOnCopy = UserDefaults.standard.bool(forKey: "clearStackOnCopy")
         self.alwaysOnMonitoring = UserDefaults.standard.bool(forKey: "alwaysOnMonitoring")
-        self.hotkeyStartsDictation = UserDefaults.standard.bool(forKey: "hotkeyStartsDictation")
+        if UserDefaults.standard.object(forKey: "hotkeyStartsDictation") == nil {
+            self.hotkeyStartsDictation = true
+        } else {
+            self.hotkeyStartsDictation = UserDefaults.standard.bool(forKey: "hotkeyStartsDictation")
+        }
         self.pushToTalk = UserDefaults.standard.bool(forKey: "pushToTalk")
         self.cleanDictation = UserDefaults.standard.bool(forKey: "cleanDictation")
-        // Default to true if key has never been set
-        if UserDefaults.standard.object(forKey: "captureClipboardOnStart") == nil {
-            self.captureClipboardOnStart = true
-        } else {
-            self.captureClipboardOnStart = UserDefaults.standard.bool(forKey: "captureClipboardOnStart")
-        }
+        self.captureClipboardOnStart = UserDefaults.standard.bool(forKey: "captureClipboardOnStart")
         if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil {
             self.maxMicOnRecord = true
         } else {
             self.maxMicOnRecord = UserDefaults.standard.bool(forKey: "maxMicOnRecord")
         }
-        self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .xml
+        self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
