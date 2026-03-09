@@ -143,18 +143,8 @@ final class ClipboardMonitor {
         return false
     }
 
-    private static let imageExtensions: Set<String> = [
-        "png", "jpg", "jpeg", "gif", "tiff", "tif", "bmp", "webp", "heic", "heif"
-    ]
-
-    /// If the file URL points to an image, create an image item using the file path directly.
-    /// Otherwise create a file item.
     private func itemForFileURL(_ url: URL) -> ClipboardItem {
-        let ext = url.pathExtension.lowercased()
-        if Self.imageExtensions.contains(ext) {
-            return ClipboardItem(contentType: .image, imagePath: url.path)
-        }
-        return ClipboardItem(contentType: .file, textContent: url.path)
+        ClipboardItem.fromFileURL(url)
     }
 
     private func readFileURLs(from pasteboard: NSPasteboard) -> [URL]? {

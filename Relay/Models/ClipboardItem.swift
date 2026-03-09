@@ -47,4 +47,19 @@ struct ClipboardItem: Identifiable, Equatable {
     static func == (lhs: ClipboardItem, rhs: ClipboardItem) -> Bool {
         lhs.id == rhs.id
     }
+
+    // MARK: - File URL factory
+
+    static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "tiff", "tif", "bmp", "webp", "heic", "heif"
+    ]
+
+    /// Create a ClipboardItem from a file URL, classifying images vs other files.
+    static func fromFileURL(_ url: URL) -> ClipboardItem {
+        let ext = url.pathExtension.lowercased()
+        if imageExtensions.contains(ext) {
+            return ClipboardItem(contentType: .image, imagePath: url.path)
+        }
+        return ClipboardItem(contentType: .file, textContent: url.path)
+    }
 }
