@@ -3,7 +3,11 @@ import SwiftUI
 struct TranscriptionTextView: View {
     let text: String
     let items: [ClipboardItem]
+    let isRecording: Bool
     var onRemoveRef: ((Int) -> Void)?
+
+    /// Delays re-enabling text animation after recording stops to avoid bounce.
+    @State private var animateText = false
 
     var body: some View {
         FlowLayout(rowSpacing: 6, itemSpacing: 4, minRowHeight: 22) {
@@ -32,8 +36,19 @@ struct TranscriptionTextView: View {
                 }
             }
         }
-        .animation(.snappy(duration: 0.25), value: text)
+        .animation(animateText ? .snappy(duration: 0.25) : nil, value: text)
         .animation(.snappy(duration: 0.25), value: items.count)
+        .onChange(of: isRecording) { _, recording in
+            if recording {
+                animateText = false
+            } else {
+                // Delay enabling animation so finalized text swap doesn't bounce
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(100))
+                    animateText = true
+                }
+            }
+        }
     }
 
     private enum SegmentKind {
