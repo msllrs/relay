@@ -10,6 +10,7 @@ final class ContextStack: ObservableObject {
     var isEmpty: Bool { items.isEmpty }
     var isNearLimit: Bool { items.count >= Self.maxItems - 2 }
     var isAtLimit: Bool { items.count >= Self.maxItems }
+    var hasNonVoiceItems: Bool { items.contains { $0.contentType != .voiceNote } }
 
     func add(_ item: ClipboardItem) {
         if items.count >= Self.maxItems {

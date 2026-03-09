@@ -11,6 +11,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
     case text
     case image
     case file
+    case folder
     case voiceNote
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .text: "Text"
         case .image: "Image"
         case .file: "File"
+        case .folder: "Folder"
         case .voiceNote: "Voice Note"
         }
     }
@@ -43,6 +45,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .text: "doc.text"
         case .image: "photo"
         case .file: "doc"
+        case .folder: "doc"
         case .voiceNote: "mic.fill"
         }
     }

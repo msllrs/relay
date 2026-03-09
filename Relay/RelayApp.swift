@@ -1,6 +1,24 @@
 import Combine
 import SwiftUI
 
+/// NSHostingController that caps the popover height at 85% of screen visible area.
+/// Without this, a SwiftUI ScrollView claims infinite height and the popover either
+/// explodes to fill the screen or collapses. The cap gives ScrollView a finite proposal.
+final class MaxHeightHostingController<Content: View>: NSHostingController<Content> {
+    private static var maxScreenFraction: CGFloat { 0.85 }
+
+    override var preferredContentSize: NSSize {
+        get {
+            var size = super.preferredContentSize
+            if let screen = NSScreen.main {
+                size.height = min(size.height, screen.visibleFrame.height * Self.maxScreenFraction)
+            }
+            return size
+        }
+        set { super.preferredContentSize = newValue }
+    }
+}
+
 @main
 struct RelayApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
@@ -41,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.contentSize = NSSize(width: 360, height: 10) // height is dynamic
         popover.behavior = .transient // closes on click-outside and Esc
         popover.delegate = self
-        popover.contentViewController = NSHostingController(
+        popover.contentViewController = MaxHeightHostingController(
             rootView: MenuBarPopover()
                 .environmentObject(appState)
         )

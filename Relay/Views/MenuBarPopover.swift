@@ -101,17 +101,21 @@ private struct MainPage: View {
             .padding(.bottom, hasContent || appState.showCopiedConfirmation || !appState.displayTranscription.isEmpty ? 0 : 16)
             .transaction { $0.animation = nil }
 
-            // Transcription text with inline chips
-            if !appState.displayTranscription.isEmpty {
-                TranscriptionTextView(
-                    text: appState.displayTranscription,
-                    items: appState.stack.items,
-                    isRecording: appState.isRecording,
-                    onRemoveRef: { appState.removeRef($0) }
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, hasContent ? 0 : 16)
+            // Transcription text with inline chips (scrollable when popover hits max height)
+            if !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems {
+                ScrollView(.vertical, showsIndicators: false) {
+                    TranscriptionTextView(
+                        text: appState.displayTranscription,
+                        items: appState.stack.items,
+                        isRecording: appState.isRecording,
+                        onRemoveRef: { appState.removeRef($0) }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, hasContent ? 0 : 16)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             // Footer: divider + action buttons
@@ -237,7 +241,7 @@ private struct FooterButtonsView: View {
             Button(action: onClear) {
                 Text("Clear Stack")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.primary.opacity(clearHovered ? 0.8 : 0.55))
+                    .foregroundStyle(.primary.opacity(clearHovered ? 0.95 : 0.8))
                     .fixedSize()
                     .scaleEffect(collapsed ? 0.5 : 1)
                     .opacity(collapsed ? 0 : 1)
@@ -251,7 +255,7 @@ private struct FooterButtonsView: View {
             .frame(maxWidth: collapsed ? 0 : .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.primary.opacity(clearHovered ? 0.1 : 0.06))
+                    .fill(Color.primary.opacity(clearHovered ? 0.14 : 0.1))
                     .opacity(collapsed ? 0 : 1)
             )
             .clipped()
@@ -276,7 +280,7 @@ private struct FooterButtonsView: View {
                         .blur(radius: collapsed ? 0 : 4)
                 }
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.primary.opacity(copyHovered ? 0.8 : 0.55))
+                .foregroundStyle(.primary.opacity(copyHovered ? 0.95 : 0.8))
                 .frame(maxWidth: .infinity)
                 .frame(height: 36)
                 .contentShape(Rectangle())
@@ -284,7 +288,7 @@ private struct FooterButtonsView: View {
             .buttonStyle(.plain)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.primary.opacity(copyHovered ? 0.1 : 0.06))
+                    .fill(collapsed ? Self.copiedColor.opacity(0.12) : Color.primary.opacity(copyHovered ? 0.14 : 0.1))
             )
             .onHover { copyHovered = $0 }
         }

@@ -13,6 +13,7 @@ extension ContentType {
         case .text: Self.chipColors.text
         case .image: Self.chipColors.image
         case .file: Self.chipColors.file
+        case .folder: Self.chipColors.file
         case .voiceNote: Self.chipColors.voiceNote
         }
     }

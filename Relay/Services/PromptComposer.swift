@@ -76,7 +76,7 @@ enum PromptComposer {
             return "```\n\(raw)\n```"
         case .image:
             return "![image](\(raw.replacingOccurrences(of: "[image: ", with: "").replacingOccurrences(of: "]", with: "")))"
-        case .file:
+        case .file, .folder:
             return "`\(raw)`"
         case .url:
             return raw

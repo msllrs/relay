@@ -14,6 +14,7 @@ final class ClipboardMonitor {
 
     func start() {
         stop()
+        lastChangeCount = NSPasteboard.general.changeCount
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.checkClipboard()

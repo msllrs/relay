@@ -54,11 +54,14 @@ struct ClipboardItem: Identifiable, Equatable {
         "png", "jpg", "jpeg", "gif", "tiff", "tif", "bmp", "webp", "heic", "heif"
     ]
 
-    /// Create a ClipboardItem from a file URL, classifying images vs other files.
+    /// Create a ClipboardItem from a file URL, classifying images, folders, and other files.
     static func fromFileURL(_ url: URL) -> ClipboardItem {
         let ext = url.pathExtension.lowercased()
         if imageExtensions.contains(ext) {
             return ClipboardItem(contentType: .image, imagePath: url.path)
+        }
+        if url.hasDirectoryPath {
+            return ClipboardItem(contentType: .folder, textContent: url.path)
         }
         return ClipboardItem(contentType: .file, textContent: url.path)
     }
