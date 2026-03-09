@@ -36,6 +36,22 @@ struct MenuBarPopover: View {
         .frame(width: 360)
         .modifier(OptionKeyTracker())
         .animation(.easeInOut(duration: 0.2), value: appState.showCopiedConfirmation)
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            var handled = false
+            for provider in providers {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url, url.isFileURL else { return }
+                    DispatchQueue.main.async {
+                        let item = ClipboardItem.fromFileURL(url)
+                        appState.stack.add(item)
+                        appState.recordRefMarker(for: item.id)
+                        appState.notifyItemAdded()
+                    }
+                }
+                handled = true
+            }
+            return handled
+        }
     }
 }
 
