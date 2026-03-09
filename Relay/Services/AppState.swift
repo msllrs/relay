@@ -481,14 +481,10 @@ final class AppState: ObservableObject {
             : PromptComposer.compose(items: stack.items, format: promptFormat)
         writeToClipboard(prompt)
 
-        flashCopiedConfirmation()
-
         if clearStackOnCopy {
-            // Delay so the copied animation plays before content disappears
-            Task {
-                try? await Task.sleep(for: .milliseconds(350))
-                clearAll()
-            }
+            clearAll()
+        } else {
+            flashCopiedConfirmation()
         }
     }
 }

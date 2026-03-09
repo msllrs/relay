@@ -99,7 +99,6 @@ private struct MainPage: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
                 .padding(.bottom, hasContent ? 0 : 16)
-                .transaction { $0.animation = nil }
             }
 
             // Footer: divider + action buttons
