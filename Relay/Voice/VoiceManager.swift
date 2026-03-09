@@ -93,22 +93,21 @@ final class VoiceManager: ObservableObject {
     func stopRecording(onComplete: @escaping @MainActor (String) -> Void) {
         guard isRecording else { return }
 
+        isRecording = false
+        audioLevel = 0
+
         let engine = activeEngine
         Task {
             do {
                 let transcription = try await engine.stopAndTranscribe()
                 self.restoreInputVolume()
-                self.isRecording = false
                 self.partialTranscription = ""
-                self.audioLevel = 0
                 if !transcription.isEmpty {
                     onComplete(transcription)
                 }
             } catch {
                 self.restoreInputVolume()
                 self.error = error.localizedDescription
-                self.isRecording = false
-                self.audioLevel = 0
             }
         }
     }
