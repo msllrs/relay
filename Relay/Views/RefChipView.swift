@@ -99,17 +99,32 @@ extension EnvironmentValues {
 struct OptionKeyTracker: ViewModifier {
     @State private var optionHeld = false
     @State private var monitor: Any?
+    @State private var holdTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
             .environment(\.optionKeyHeld, optionHeld)
             .onAppear {
                 monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-                    optionHeld = event.modifierFlags.contains(.option)
+                    let flags = event.modifierFlags.intersection([.command, .option, .shift, .control])
+                    let onlyOption = flags == .option
+                    if onlyOption && !optionHeld {
+                        holdTask?.cancel()
+                        holdTask = Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(0.5))
+                            guard !Task.isCancelled else { return }
+                            optionHeld = true
+                        }
+                    } else if !onlyOption {
+                        holdTask?.cancel()
+                        holdTask = nil
+                        optionHeld = false
+                    }
                     return event
                 }
             }
             .onDisappear {
+                holdTask?.cancel()
                 if let monitor { NSEvent.removeMonitor(monitor) }
                 monitor = nil
             }
