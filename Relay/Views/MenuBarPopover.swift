@@ -13,15 +13,36 @@ struct MenuBarPopover: View {
     @EnvironmentObject var appState: AppState
     @State private var showSettings = false
 
+    private var mainPage: some View {
+        MainPage(showSettings: $showSettings)
+            .frame(width: 360, alignment: .topLeading)
+    }
+
+    private var settingsPage: some View {
+        SettingsPage(showSettings: $showSettings, voiceManager: appState.voiceManager)
+            .frame(width: 360, alignment: .topLeading)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            if showSettings {
-                SettingsPage(showSettings: $showSettings, voiceManager: appState.voiceManager)
-            } else {
-                MainPage(showSettings: $showSettings)
-            }
+        // Both pages always exist. The active page drives height via fixedSize;
+        // the inactive page is collapsed to height 0 so it doesn't influence layout.
+        // Content cross-fades in place while the popover height animates smoothly.
+        ZStack(alignment: .topLeading) {
+            mainPage
+                .frame(height: showSettings ? 0 : nil, alignment: .top)
+                .clipped()
+                .opacity(showSettings ? 0 : 1)
+                .allowsHitTesting(!showSettings)
+
+            settingsPage
+                .frame(height: showSettings ? nil : 0, alignment: .top)
+                .clipped()
+                .opacity(showSettings ? 1 : 0)
+                .allowsHitTesting(showSettings)
         }
         .frame(width: 360)
+        .clipped()
+        .animation(.easeInOut(duration: 0.25), value: showSettings)
         .modifier(OptionKeyTracker())
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             var handled = false
@@ -338,20 +359,21 @@ private struct SettingsPage: View {
     @ObservedObject var voiceManager: VoiceManager
 
     var body: some View {
-        // Header — matches main page
-        HStack {
-            Text("Settings")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
+        VStack(spacing: 0) {
+            // Header — matches main page
+            HStack {
+                Text("Settings")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
 
-            Spacer()
+                Spacer()
 
-            SettingsGearButton(showSettings: $showSettings)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+                SettingsGearButton(showSettings: $showSettings)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
 
-        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
             Text("Voice Engine")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -461,6 +483,7 @@ private struct SettingsPage: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+        } // outer VStack
     }
 }
 
