@@ -2,27 +2,28 @@
 set -euo pipefail
 
 VERSION=$(cat VERSION)
-DMG_NAME="Relay-${VERSION}.dmg"
-STAGING_DIR=".build/dmg-staging"
+APP_PATH=".build/Relay.app"
+DMG_NAME="Relay-v${VERSION}.dmg"
+DMG_FINAL=".build/${DMG_NAME}"
+DMGBUILD="$HOME/Library/Python/3.9/bin/dmgbuild"
 
-echo "Building release..."
-./build-app.sh --release
+if [ ! -d "$APP_PATH" ]; then
+    echo "Error: $APP_PATH not found. Run ./build-app.sh --release first."
+    exit 1
+fi
+
+if [ ! -f "$DMGBUILD" ]; then
+    echo "Error: dmgbuild not found. Install with: pip3 install dmgbuild"
+    exit 1
+fi
+
+rm -f "$DMG_FINAL"
+hdiutil detach "/Volumes/Relay" 2>/dev/null || true
 
 echo "Creating DMG..."
-rm -rf "$STAGING_DIR"
-mkdir -p "$STAGING_DIR"
+APP_PATH="$APP_PATH" "$DMGBUILD" \
+    -s Resources/dmg-settings.py \
+    "Relay" \
+    "$DMG_FINAL"
 
-cp -R .build/Relay.app "$STAGING_DIR/Relay.app"
-ln -s /Applications "$STAGING_DIR/Applications"
-
-rm -f ".build/${DMG_NAME}"
-hdiutil create \
-    -volname "Relay" \
-    -srcfolder "$STAGING_DIR" \
-    -ov \
-    -format UDZO \
-    ".build/${DMG_NAME}"
-
-rm -rf "$STAGING_DIR"
-
-echo "Created .build/${DMG_NAME}"
+echo "Created $DMG_FINAL"
