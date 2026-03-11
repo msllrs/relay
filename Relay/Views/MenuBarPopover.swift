@@ -43,6 +43,9 @@ struct MenuBarPopover: View {
         .frame(width: 360)
         .clipped()
         .animation(.easeInOut(duration: 0.25), value: showSettings)
+        .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { _ in
+            showSettings = false
+        }
         .modifier(OptionKeyTracker())
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             var handled = false
