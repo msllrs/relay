@@ -325,9 +325,17 @@ final class AppState: ObservableObject {
         transcriptionTrimOffset = 0
         voiceManager.stopRecording { [weak self] fullTranscription in
             guard let self else { return }
-            let transcription = fullTranscription.count > trimOffset
-                ? String(fullTranscription.dropFirst(trimOffset)).trimmingCharacters(in: .whitespaces)
+            let transcription = trimOffset > 0
+                ? String(fullTranscription.dropFirst(min(trimOffset, fullTranscription.count)))
+                    .trimmingCharacters(in: .whitespaces)
                 : fullTranscription
+
+            // Nothing new was said after a clear — remove the empty placeholder
+            if transcription.isEmpty, let id = voiceNoteID {
+                self.stack.remove(id: id)
+                return
+            }
+
             if let id = voiceNoteID {
                 let markedText = self.insertRefMarkers(into: transcription, refs: refs)
                 self.stack.update(id: id, textContent: markedText)
@@ -611,6 +619,17 @@ final class AppState: ObservableObject {
     }
 
     func copyPromptToClipboard() {
+        // If recording, snapshot the live transcription into the voice note
+        // so the composer includes the in-progress text.
+        if voiceManager.isRecording, let id = activeVoiceNoteID {
+            let full = voiceManager.partialTranscription
+            let trimmed = full.count > transcriptionTrimOffset
+                ? String(full.dropFirst(transcriptionTrimOffset)).trimmingCharacters(in: .whitespaces)
+                : ""
+            let markedText = insertRefMarkers(into: trimmed, refs: pendingRefs)
+            stack.update(id: id, textContent: markedText)
+        }
+
         // If the only item is a voice note, just copy the raw text
         let onlyVoiceNote = stack.items.count == 1
             && stack.items[0].contentType == .voiceNote
