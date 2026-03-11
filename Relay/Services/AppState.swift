@@ -454,7 +454,14 @@ final class AppState: ObservableObject {
 
     /// Add an item to the stack, record a ref marker if recording, and flash the badge.
     func addItem(_ item: ClipboardItem) {
-        stack.add(item)
+        let wasEmpty = displayTranscription.isEmpty && !stack.hasNonVoiceItems
+        if wasEmpty {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                stack.add(item)
+            }
+        } else {
+            stack.add(item)
+        }
         recordRefMarker(for: item.id)
         notifyItemAdded()
     }
