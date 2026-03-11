@@ -33,7 +33,7 @@ struct PromptPillView: View {
             } else {
                 Text("Press \(shortcutDisplay) to start recording")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.3))
+                    .foregroundStyle(Color.primary.opacity(0.45))
                     .transition(.scaleBlur)
             }
         }
@@ -42,7 +42,7 @@ struct PromptPillView: View {
         .frame(height: 36)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(isRecording ? 0.08 : isHovered ? 0.08 : 0.05))
+                .fill(Color.primary.opacity((isRecording || isHovered) ? 0.1 : 0.07))
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

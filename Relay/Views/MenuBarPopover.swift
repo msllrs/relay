@@ -65,11 +65,19 @@ struct MenuBarPopover: View {
 
 // MARK: - Main Page
 
+private struct ScrollEdgeState: Equatable {
+    var pinnedToBottom: Bool
+    var canScrollUp: Bool
+    var canScrollDown: Bool
+}
+
 private struct MainPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
     @State private var shortcutDisplay = KeyboardShortcutModel.load().displayString
     @State private var pinnedToBottom = true
+    @State private var canScrollUp = false
+    @State private var canScrollDown = false
 
     private var hasContent: Bool {
         !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems
@@ -146,19 +154,36 @@ private struct MainPage: View {
                         .padding(.bottom, hasContent ? 0 : 16)
                         .id("transcription-bottom")
                     }
-                    .padding(.top, 16)
-                    .onScrollGeometryChange(for: Bool.self) { geo in
-                        // Pinned when within 30pt of the bottom
-                        geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height < 30
-                    } action: { _, isPinned in
-                        pinnedToBottom = isPinned
+                    .onScrollGeometryChange(for: ScrollEdgeState.self) { geo in
+                        let overflow = geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height
+                        return ScrollEdgeState(
+                            pinnedToBottom: overflow < 30,
+                            canScrollUp: geo.contentOffset.y > 5,
+                            canScrollDown: overflow > 5
+                        )
+                    } action: { _, state in
+                        pinnedToBottom = state.pinnedToBottom
+                        canScrollUp = state.canScrollUp
+                        canScrollDown = state.canScrollDown
                     }
                     .onChange(of: appState.displayTranscription) { _, _ in
                         if appState.isRecording && pinnedToBottom {
                             proxy.scrollTo("transcription-bottom", anchor: .bottom)
                         }
                     }
+                    .mask {
+                        VStack(spacing: 0) {
+                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                                .frame(height: canScrollUp ? 24 : 0)
+                            Rectangle().fill(.black)
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: canScrollDown ? 24 : 0)
+                        }
+                        .animation(.easeInOut(duration: 0.2), value: canScrollUp)
+                        .animation(.easeInOut(duration: 0.2), value: canScrollDown)
+                    }
                 }
+                .padding(.top, 16)
                 .scrollBounceBehavior(.basedOnSize)
                 .frame(maxHeight: maxScrollHeight)
                 .fixedSize(horizontal: false, vertical: true)
