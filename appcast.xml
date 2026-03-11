@@ -5,11 +5,11 @@
         <item>
             <title>0.2.0</title>
             <pubDate>Wed, 11 Mar 2026 23:23:59 +0000</pubDate>
-            <sparkle:version>73</sparkle:version>
+            <sparkle:version>75</sparkle:version>
             <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.2.0/Relay-v0.2.0.zip" length="5324344" type="application/octet-stream" sparkle:edSignature="AYnaI0sBnIDls/TwuxWfWnX1LAw6EnC3ivLphxpU5BvCTPcsTSyMts48m52xWKPDWVHj88mVsEx7ayq52kGfDg=="/>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.2.0/Relay-v0.2.0.zip" length="5327589" type="application/octet-stream" sparkle:edSignature="yDONbP+X43dcfoofj4XII/YF9bhUBzfXW9jrwcUjpfTjGeJKUlqWWvNg1ZRPXFy7CDRJehvm+p2vn3/AryDQCg=="/>
         </item>
     </channel>
 </rss>
