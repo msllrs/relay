@@ -23,7 +23,6 @@ struct MenuBarPopover: View {
         }
         .frame(width: 360)
         .modifier(OptionKeyTracker())
-        .animation(.easeInOut(duration: 0.2), value: appState.showCopiedConfirmation)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             var handled = false
             for provider in providers {
@@ -75,7 +74,6 @@ private struct MainPage: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .transaction { $0.animation = nil }
 
             // Prompt pill (idle or recording)
             PromptPillView(
@@ -87,7 +85,6 @@ private struct MainPage: View {
             )
             .padding(.top, 2)
             .padding(.bottom, hasContent || appState.showCopiedConfirmation || !appState.displayTranscription.isEmpty ? 0 : 16)
-            .transaction { $0.animation = nil }
 
             // Show a processing indicator for engines that buffer audio before transcribing
             if appState.isRecording
@@ -218,7 +215,6 @@ private struct FooterView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
                     .padding(.bottom, 16)
-                    .transaction { $0.animation = nil }
             }
 
             if showCopiedConfirmation || hasContent {
@@ -332,7 +328,6 @@ private struct SettingsPage: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .transaction { $0.animation = nil }
 
         VStack(alignment: .leading, spacing: 8) {
             Text("Voice Engine")

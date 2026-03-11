@@ -43,7 +43,6 @@ struct PromptPillView: View {
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.primary.opacity(isRecording ? 0.08 : isHovered ? 0.08 : 0.05))
-                .transaction { $0.animation = nil }
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
