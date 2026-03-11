@@ -3,6 +3,7 @@ import Foundation
 enum ContentType: String, CaseIterable, Identifiable, Codable {
     case code
     case json
+    case markdown
     case terminal
     case url
     case error
@@ -20,6 +21,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .code: "Code"
         case .json: "JSON"
+        case .markdown: "Markdown"
         case .terminal: "Terminal"
         case .url: "URL"
         case .error: "Error"
@@ -37,6 +39,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .json: "curlybraces"
+        case .markdown: "text.document"
         case .terminal: "terminal"
         case .url: "link"
         case .error: "exclamationmark.triangle"

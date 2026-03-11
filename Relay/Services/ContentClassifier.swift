@@ -27,10 +27,13 @@ enum ContentClassifier {
         // 6. Terminal output
         if isTerminal(trimmed, lines: lines) { return .terminal }
 
-        // 7. Code
+        // 7. Markdown
+        if isMarkdown(lines) { return .markdown }
+
+        // 8. Code
         if isCode(lines) { return .code }
 
-        // 8. Fallback
+        // 9. Fallback
         return .text
     }
 
@@ -110,6 +113,24 @@ enum ContentClassifier {
         if promptLines.count >= 1 { return true }
         if text.contains("\u{1B}[") { return true }
         return false
+    }
+
+    private static func isMarkdown(_ lines: [String]) -> Bool {
+        var hits = 0
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // ATX headings
+            if trimmed.range(of: #"^#{1,6} "#, options: .regularExpression) != nil { hits += 1 }
+            // Fenced code blocks
+            if trimmed.hasPrefix("```") { hits += 1 }
+            // Bullet lists
+            if trimmed.range(of: #"^[-*+] "#, options: .regularExpression) != nil { hits += 1 }
+            // Links / images
+            if trimmed.contains("](") { hits += 1 }
+            // Bold / italic
+            if trimmed.contains("**") || trimmed.contains("__") { hits += 1 }
+        }
+        return hits >= 2
     }
 
     private static func isCode(_ lines: [String]) -> Bool {

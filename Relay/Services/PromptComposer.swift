@@ -102,7 +102,7 @@ enum PromptComposer {
 
     private static func markdownContent(for item: ClipboardItem, raw: String) -> String {
         switch item.contentType {
-        case .code, .json, .terminal, .error, .diff:
+        case .code, .json, .markdown, .terminal, .error, .diff:
             return "```\n\(raw)\n```"
         case .image:
             return "![image](\(raw.replacingOccurrences(of: "[image: ", with: "").replacingOccurrences(of: "]", with: "")))"

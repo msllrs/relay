@@ -5,6 +5,7 @@ extension ContentType {
         switch self {
         case .code: Self.chipColors.code
         case .json: Self.chipColors.json
+        case .markdown: Self.chipColors.code
         case .terminal: Self.chipColors.terminal
         case .url: Self.chipColors.url
         case .error: Self.chipColors.error
