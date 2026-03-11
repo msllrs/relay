@@ -47,10 +47,7 @@ private struct MainPage: View {
     @State private var shortcutDisplay = KeyboardShortcutModel.load().displayString
 
     private var hasContent: Bool {
-        if appState.isRecording {
-            return !appState.displayTranscription.isEmpty
-        }
-        return !appState.stack.isEmpty || !appState.displayTranscription.isEmpty
+        !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems
     }
 
     var body: some View {
