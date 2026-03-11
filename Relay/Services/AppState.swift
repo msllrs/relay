@@ -72,6 +72,7 @@ final class AppState: ObservableObject {
     private var pendingRefs: [PendingRef] = []
     private var recordingStartTime: Date?
     private var copiedConfirmationTask: Task<Void, Never>?
+    private var clearAfterCopyTask: Task<Void, Never>?
 
     let voiceManager = VoiceManager()
     private var clipboardMonitor: ClipboardMonitor?
@@ -602,12 +603,19 @@ final class AppState: ObservableObject {
             : PromptComposer.compose(items: stack.items, format: promptFormat, voiceNotePosition: voiceNotePosition)
         writeToClipboard(prompt)
 
-        if clearStackOnCopy {
+        flashCopiedConfirmation()
 
-            clearAll()
-            flashCopiedConfirmation()
-        } else {
-            flashCopiedConfirmation()
+        if clearStackOnCopy {
+            // Delay the clear so the Copied banner can fully appear before content collapses.
+            // This prevents the banner, divider, and transcription from overlapping mid-animation.
+            clearAfterCopyTask?.cancel()
+            clearAfterCopyTask = Task {
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    clearAll()
+                }
+            }
         }
     }
 }
