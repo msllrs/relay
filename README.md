@@ -16,6 +16,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 - **Screenshots, files, and folders** — Drag and drop images, files, or entire folders to add them as context
 - **Voice notes** — Record and transcribe with native macOS speech recognition, WhisperKit, or Parakeet
 - **Prompt composition** — Generates structured prompts in Markdown format, with an option to switch to XML
+- **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation
 - **Global hotkey** — Customizable keyboard shortcut for recording and composing
 
 ## Install
