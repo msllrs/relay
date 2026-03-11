@@ -71,6 +71,7 @@ final class AppState: ObservableObject {
     }
     private var pendingRefs: [PendingRef] = []
     private var recordingStartTime: Date?
+    private var copiedConfirmationTask: Task<Void, Never>?
 
     let voiceManager = VoiceManager()
     private var clipboardMonitor: ClipboardMonitor?
@@ -362,11 +363,16 @@ final class AppState: ObservableObject {
     }
 
     private func flashCopiedConfirmation() {
-        showCopiedConfirmation = true
-        Task {
+        copiedConfirmationTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showCopiedConfirmation = true
+        }
+        copiedConfirmationTask = Task {
             try? await Task.sleep(for: .seconds(1.5))
-            showCopiedConfirmation = false
-
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showCopiedConfirmation = false
+            }
         }
     }
 
