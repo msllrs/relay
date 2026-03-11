@@ -57,7 +57,7 @@ private struct MainPage: View {
             // Header
             HStack {
                 Text("Relay")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
                     .onTapGesture {
                         guard appState.isDemo else { return }
@@ -194,6 +194,7 @@ private struct SettingsGearButton: View {
             }
             .animation(.easeInOut(duration: 0.25), value: optionHeld)
             .animation(.easeInOut(duration: 0.25), value: showSettings)
+            .offset(y: 1)
             .frame(width: 24, height: 24)
             .contentShape(Rectangle())
         }
@@ -338,7 +339,7 @@ private struct SettingsPage: View {
         // Header — matches main page
         HStack {
             Text("Settings")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
 
             Spacer()
