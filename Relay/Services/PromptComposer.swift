@@ -14,11 +14,41 @@ enum PromptFormat: String, CaseIterable, Identifiable {
     }
 }
 
+enum VoiceNotePosition: String, CaseIterable, Identifiable {
+    case top, bottom, inline
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .top: "Top"
+        case .bottom: "Bottom"
+        case .inline: "Inline"
+        }
+    }
+}
+
 enum PromptComposer {
-    static func compose(items: [ClipboardItem], format: PromptFormat = .xml) -> String {
+    static func compose(items: [ClipboardItem], format: PromptFormat = .xml, voiceNotePosition: VoiceNotePosition = .top) -> String {
+        let ordered = reorder(items: items, position: voiceNotePosition)
         switch format {
-        case .xml: composeXML(items: items)
-        case .markdown: composeMarkdown(items: items)
+        case .xml: return composeXML(items: ordered)
+        case .markdown: return composeMarkdown(items: ordered)
+        }
+    }
+
+    private static func reorder(items: [ClipboardItem], position: VoiceNotePosition) -> [ClipboardItem] {
+        switch position {
+        case .inline:
+            return items
+        case .top:
+            let voice = items.filter { $0.contentType == .voiceNote }
+            let rest = items.filter { $0.contentType != .voiceNote }
+            return voice + rest
+        case .bottom:
+            let voice = items.filter { $0.contentType == .voiceNote }
+            let rest = items.filter { $0.contentType != .voiceNote }
+            return rest + voice
         }
     }
 

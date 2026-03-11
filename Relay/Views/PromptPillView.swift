@@ -33,7 +33,7 @@ struct PromptPillView: View {
             } else {
                 Text("Press \(shortcutDisplay) to start recording")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.primary.opacity(0.3))
                     .transition(.scaleBlur)
             }
         }

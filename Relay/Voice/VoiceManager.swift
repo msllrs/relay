@@ -1,3 +1,5 @@
+import ApplicationServices
+import AVFoundation
 import CoreAudio
 import Foundation
 
@@ -16,6 +18,7 @@ final class VoiceManager: ObservableObject {
     @Published var audioLevel: Float = 0
     @Published var isDownloading = false
     @Published var downloadProgress: Double = 0
+    @Published var downloadComplete = false
     @Published var error: String?
 
     /// The input device to use for recording. `nil` means system default.
@@ -24,10 +27,15 @@ final class VoiceManager: ObservableObject {
     private nonisolated(unsafe) var activeEngine: any SpeechEngine
     private var previousInputVolume: Float?
 
+    /// Cached engine instances so downloaded models survive engine switching.
+    private var engineCache: [SpeechEngineType: any SpeechEngine] = [:]
+
     init() {
         let type = SpeechEngineType.stored
         self.selectedEngineType = type
-        self.activeEngine = Self.createEngine(for: type)
+        let engine = Self.createEngine(for: type)
+        self.activeEngine = engine
+        self.engineCache[type] = engine
     }
 
     var currentEngineNeedsDownload: Bool {
@@ -49,13 +57,41 @@ final class VoiceManager: ObservableObject {
             }
         } catch {
             self.error = error.localizedDescription
+            isDownloading = false
+            return
         }
 
         isDownloading = false
+        downloadComplete = true
+        try? await Task.sleep(for: .seconds(1.5))
+        downloadComplete = false
+    }
+
+    /// Fake download cycle for tuning the animation in demo mode.
+    func simulateDownload() async {
+        isDownloading = true
+        downloadProgress = 0
+        error = nil
+        downloadComplete = false
+
+        try? await Task.sleep(for: .seconds(2))
+
+        isDownloading = false
+        downloadComplete = true
+        try? await Task.sleep(for: .seconds(1.5))
+        downloadComplete = false
     }
 
     func startRecording() {
         guard !isRecording else { return }
+
+        // Ensure Accessibility is granted before requesting mic permission.
+        // On first launch both prompts fire at once and macOS hides one behind the other.
+        if !AXIsProcessTrusted() {
+            error = "Accessibility permission required. Grant it in System Settings > Privacy & Security > Accessibility, then try again."
+            return
+        }
+
         error = nil
         partialTranscription = ""
         isRecording = true
@@ -68,6 +104,16 @@ final class VoiceManager: ObservableObject {
         }
         Task {
             do {
+                // Request mic permission before engines that don't handle it internally.
+                // WhisperKit and NativeSpeechEngine call requestRecordPermission themselves;
+                // calling it again from here causes a crash (double CheckedContinuation resume on macOS 26).
+                if !engine.handlesPermissionInternally {
+                    let micGranted = await AVAudioApplication.requestRecordPermission()
+                    guard micGranted else {
+                        throw SpeechEngineError.microphonePermissionDenied
+                    }
+                }
+
                 try await engine.startStreaming(inputDeviceID: deviceID, onPartialResult: { [weak self] partial in
                     Task { @MainActor in
                         self?.partialTranscription = partial
@@ -133,7 +179,13 @@ final class VoiceManager: ObservableObject {
     }
 
     private func updateActiveEngine() {
-        activeEngine = Self.createEngine(for: selectedEngineType)
+        if let cached = engineCache[selectedEngineType] {
+            activeEngine = cached
+        } else {
+            let engine = Self.createEngine(for: selectedEngineType)
+            engineCache[selectedEngineType] = engine
+            activeEngine = engine
+        }
     }
 
     private static func createEngine(for type: SpeechEngineType) -> any SpeechEngine {

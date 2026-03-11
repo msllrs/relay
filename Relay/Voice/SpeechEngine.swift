@@ -10,6 +10,10 @@ protocol SpeechEngine: AnyObject, Sendable {
     /// Whether a model download is required before first use.
     var needsModelDownload: Bool { get }
 
+    /// Whether this engine handles microphone permission requests internally.
+    /// When true, VoiceManager skips its own requestRecordPermission call.
+    var handlesPermissionInternally: Bool { get }
+
     /// Download the required model. No-op if already downloaded.
     func downloadModel(progress: @escaping @Sendable (Double) -> Void) async throws
 

@@ -18,6 +18,7 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     }
 
     var needsModelDownload: Bool { false }
+    var handlesPermissionInternally: Bool { true } // SFSpeechRecognizer handles both speech + mic permissions
 
     init(locale: Locale = .current) {
         self.speechRecognizer = SFSpeechRecognizer(locale: locale)
@@ -156,6 +157,7 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
 enum SpeechEngineError: LocalizedError {
     case engineUnavailable
     case permissionDenied
+    case microphonePermissionDenied
     case recordingFailed
     case transcriptionFailed(String)
 
@@ -165,6 +167,8 @@ enum SpeechEngineError: LocalizedError {
             "Speech recognition is not available on this device."
         case .permissionDenied:
             "Speech recognition permission was denied. Enable it in System Settings > Privacy & Security."
+        case .microphonePermissionDenied:
+            "Microphone access was denied. Enable it in System Settings > Privacy & Security > Microphone."
         case .recordingFailed:
             "Failed to start audio recording."
         case .transcriptionFailed(let message):
