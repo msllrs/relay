@@ -535,12 +535,24 @@ private struct SettingsPage: View {
 
             Divider()
 
-            HStack {
+            HStack(spacing: 4) {
                 if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
                     Text("v\(version)")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                Text("·")
+                    .font(.caption)
+                    .foregroundStyle(.quaternary)
+                Link("@msllrs", destination: URL(string: "https://x.com/msllrs")!)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Text("·")
+                    .font(.caption)
+                    .foregroundStyle(.quaternary)
+                Link("GitHub", destination: URL(string: "https://github.com/msllrs/relay")!)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 Button("Check for Updates") {
                     updaterManager.checkForUpdates()
