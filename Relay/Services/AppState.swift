@@ -23,14 +23,23 @@ final class AppState: ObservableObject {
     @Published var pushToTalk: Bool {
         didSet { UserDefaults.standard.set(pushToTalk, forKey: "pushToTalk") }
     }
-    @Published var cleanDictation: Bool {
-        didSet { UserDefaults.standard.set(cleanDictation, forKey: "cleanDictation") }
-    }
     @Published var captureClipboardOnStart: Bool {
         didSet { UserDefaults.standard.set(captureClipboardOnStart, forKey: "captureClipboardOnStart") }
     }
+    @Published var autoCopyDictation: Bool {
+        didSet { UserDefaults.standard.set(autoCopyDictation, forKey: "autoCopyDictation") }
+    }
+    @Published var autoCopyComposedPrompt: Bool {
+        didSet { UserDefaults.standard.set(autoCopyComposedPrompt, forKey: "autoCopyComposedPrompt") }
+    }
+    @Published var autoPasteAfterCopy: Bool {
+        didSet { UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy") }
+    }
     @Published var promptFormat: PromptFormat {
         didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
+    }
+    @Published var voiceNotePosition: VoiceNotePosition {
+        didSet { UserDefaults.standard.set(voiceNotePosition.rawValue, forKey: "voiceNotePosition") }
     }
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
@@ -48,8 +57,8 @@ final class AppState: ObservableObject {
     /// Accumulated transcription text from previous dictation sessions (before the current one).
     private var frozenTranscription = ""
 
-    /// Number of non-voiceNote items in the stack when a dictation session started (for clean dictation).
-    private var clipboardItemCountAtSessionStart = 0
+    /// Number of characters in `partialTranscription` to skip (set when clearing mid-recording).
+    private var transcriptionTrimOffset = 0
 
     /// ID of the placeholder voice note added when recording starts.
     private var activeVoiceNoteID: UUID?
@@ -57,9 +66,11 @@ final class AppState: ObservableObject {
     /// Tracks clipboard items that arrived during an active dictation session.
     private struct PendingRef {
         let itemID: UUID
-        let charOffset: Int
+        /// Seconds since recording started when this ref was captured.
+        let timeOffset: TimeInterval
     }
     private var pendingRefs: [PendingRef] = []
+    private var recordingStartTime: Date?
 
     let voiceManager = VoiceManager()
     private var clipboardMonitor: ClipboardMonitor?
@@ -78,14 +89,17 @@ final class AppState: ObservableObject {
             self.hotkeyStartsDictation = UserDefaults.standard.bool(forKey: "hotkeyStartsDictation")
         }
         self.pushToTalk = UserDefaults.standard.bool(forKey: "pushToTalk")
-        self.cleanDictation = UserDefaults.standard.bool(forKey: "cleanDictation")
         self.captureClipboardOnStart = UserDefaults.standard.bool(forKey: "captureClipboardOnStart")
+        self.autoCopyDictation = UserDefaults.standard.bool(forKey: "autoCopyDictation")
+        self.autoCopyComposedPrompt = UserDefaults.standard.bool(forKey: "autoCopyComposedPrompt")
+        self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
         if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil {
             self.maxMicOnRecord = true
         } else {
             self.maxMicOnRecord = UserDefaults.standard.bool(forKey: "maxMicOnRecord")
         }
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
+        self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -275,8 +289,9 @@ final class AppState: ObservableObject {
         } else if hotkeyStartsDictation && !isMonitoring {
             // Start monitoring + begin dictation
             startMonitoring()
-            clipboardItemCountAtSessionStart = stack.items.filter { $0.contentType != .voiceNote }.count
             pendingRefs = []
+            transcriptionTrimOffset = 0
+            recordingStartTime = Date()
             // Reserve a placeholder in the stack so the voice note keeps its position
             let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
             activeVoiceNoteID = placeholder.id
@@ -300,24 +315,18 @@ final class AppState: ObservableObject {
     func finishDictationAndStop() {
         hotkeyManager?.stopEscMonitor()
         hotkeyManager?.stopKeyUpMonitor()
-        let itemCountBefore = clipboardItemCountAtSessionStart
-        let isPushToTalk = pushToTalk
         let refs = pendingRefs
         pendingRefs = []
         let voiceNoteID = activeVoiceNoteID
         activeVoiceNoteID = nil
-        voiceManager.stopRecording { [weak self] transcription in
+        let trimOffset = transcriptionTrimOffset
+        transcriptionTrimOffset = 0
+        voiceManager.stopRecording { [weak self] fullTranscription in
             guard let self else { return }
-            // Clean dictation: if push-to-talk and no clipboard items were added during session,
-            // copy raw transcription directly instead of adding to stack
-            let currentClipboardCount = self.stack.items.filter { $0.contentType != .voiceNote }.count
-            if isPushToTalk && self.cleanDictation && currentClipboardCount == itemCountBefore {
-                // Remove the placeholder since we're copying raw
-                if let id = voiceNoteID { self.stack.remove(id: id) }
-                self.frozenTranscription = ""
-                self.displayTranscription = ""
-                self.copyRawTranscription(transcription)
-            } else if let id = voiceNoteID {
+            let transcription = fullTranscription.count > trimOffset
+                ? String(fullTranscription.dropFirst(trimOffset)).trimmingCharacters(in: .whitespaces)
+                : fullTranscription
+            if let id = voiceNoteID {
                 let markedText = self.insertRefMarkers(into: transcription, refs: refs)
                 self.stack.update(id: id, textContent: markedText)
                 self.freezeCurrentSession(markedText)
@@ -345,11 +354,6 @@ final class AppState: ObservableObject {
         stopMonitoring()
     }
 
-    private func copyRawTranscription(_ text: String) {
-        writeToClipboard(text)
-        flashCopiedConfirmation()
-    }
-
     private func writeToClipboard(_ text: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -362,7 +366,18 @@ final class AppState: ObservableObject {
         Task {
             try? await Task.sleep(for: .seconds(1.5))
             showCopiedConfirmation = false
+
         }
+    }
+
+    private nonisolated func simulatePaste() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+        keyDown?.flags = .maskCommand
+        keyUp?.flags = .maskCommand
+        keyDown?.post(tap: .cgSessionEventTap)
+        keyUp?.post(tap: .cgSessionEventTap)
     }
 
     private func insertRefMarkers(into text: String, refs: [PendingRef]) -> String {
@@ -378,10 +393,23 @@ final class AppState: ObservableObject {
             }
         }
 
+        // Convert time offsets to character positions proportionally.
+        // This works for all engines: Native streams text continuously so the
+        // proportion is accurate, while Parakeet delivers text in chunks so
+        // time-based positioning distributes chips correctly.
+        let totalElapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 1
+        let textLength = text.count
+
         var markers: [(charOffset: Int, refText: String)] = []
         for ref in refs {
             if let idx = indexByID[ref.itemID] {
-                markers.append((ref.charOffset, " [ref:\(idx)]"))
+                let charOffset: Int
+                if totalElapsed > 0 && textLength > 0 {
+                    charOffset = min(Int((ref.timeOffset / totalElapsed) * Double(textLength)), textLength)
+                } else {
+                    charOffset = textLength
+                }
+                markers.append((charOffset, " [ref:\(idx)]"))
             }
         }
 
@@ -417,18 +445,6 @@ final class AppState: ObservableObject {
         return text.distance(from: text.startIndex, to: end)
     }
 
-    /// If the stack is just a single voice note, auto-copy raw text to clipboard.
-    private func autoCopyIfVoiceOnly() {
-        guard stack.items.count == 1,
-              stack.items[0].contentType == .voiceNote,
-              let text = stack.items[0].textContent, !text.isEmpty else { return }
-        writeToClipboard(text)
-        stack.clear()
-        frozenTranscription = ""
-        displayTranscription = ""
-        flashCopiedConfirmation()
-    }
-
     /// Add an item to the stack, record a ref marker if recording, and flash the badge.
     func addItem(_ item: ClipboardItem) {
         stack.add(item)
@@ -452,27 +468,42 @@ final class AppState: ObservableObject {
             frozenTranscription += " " + markedText
         }
         displayTranscription = frozenTranscription
-        autoCopyIfVoiceOnly()
+
+        // Auto-copy after dictation: composed prompt takes priority when both are on
+        if autoCopyComposedPrompt {
+
+            copyPromptToClipboard()
+        } else if autoCopyDictation {
+
+            let rawText = frozenTranscription.replacing(/\s?\[ref:\d+\]/, with: "")
+            writeToClipboard(rawText)
+            flashCopiedConfirmation()
+        }
+
+        if (autoCopyDictation || autoCopyComposedPrompt) && autoPasteAfterCopy {
+            Task {
+                try? await Task.sleep(for: .milliseconds(100))
+                simulatePaste()
+            }
+        }
     }
 
     /// Record a reference marker for a clipboard item captured during dictation.
     func recordRefMarker(for itemID: UUID) {
         guard voiceManager.isRecording else { return }
-        // Use current transcription length so the ref appears after all spoken text so far
-        let partial = voiceManager.partialTranscription
-        // Place at end of current text (not at the raw offset, which can be 0 before speech starts)
-        let offset = partial.isEmpty ? Int.max : partial.count
-        pendingRefs.append(PendingRef(itemID: itemID, charOffset: offset))
+        let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+        pendingRefs.append(PendingRef(itemID: itemID, timeOffset: elapsed))
         rebuildDisplayTranscription()
     }
 
     /// Rebuild `displayTranscription` by splicing pending ref markers into live partial text.
     private func rebuildDisplayTranscription() {
         guard voiceManager.isRecording else { return }
-        let currentSession = insertRefMarkers(
-            into: voiceManager.partialTranscription,
-            refs: pendingRefs
-        )
+        let full = voiceManager.partialTranscription
+        let trimmed = full.count > transcriptionTrimOffset
+            ? String(full.dropFirst(transcriptionTrimOffset)).trimmingCharacters(in: .whitespaces)
+            : ""
+        let currentSession = insertRefMarkers(into: trimmed, refs: pendingRefs)
         if frozenTranscription.isEmpty {
             displayTranscription = currentSession
         } else {
@@ -543,6 +574,17 @@ final class AppState: ObservableObject {
         stack.clear()
         frozenTranscription = ""
         displayTranscription = ""
+        pendingRefs = []
+
+        // If recording, add a fresh placeholder and skip already-transcribed text
+        if voiceManager.isRecording {
+            transcriptionTrimOffset = voiceManager.partialTranscription.count
+            let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
+            activeVoiceNoteID = placeholder.id
+            stack.add(placeholder)
+        } else {
+            activeVoiceNoteID = nil
+        }
     }
 
     func copyPromptToClipboard() {
@@ -551,11 +593,13 @@ final class AppState: ObservableObject {
             && stack.items[0].contentType == .voiceNote
         let prompt = onlyVoiceNote
             ? (stack.items[0].textContent ?? "")
-            : PromptComposer.compose(items: stack.items, format: promptFormat)
+            : PromptComposer.compose(items: stack.items, format: promptFormat, voiceNotePosition: voiceNotePosition)
         writeToClipboard(prompt)
 
         if clearStackOnCopy {
+
             clearAll()
+            flashCopiedConfirmation()
         } else {
             flashCopiedConfirmation()
         }

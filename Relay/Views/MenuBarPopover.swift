@@ -1,6 +1,14 @@
 import Carbon.HIToolbox
 import SwiftUI
 
+private let successGreen = Color(nsColor: NSColor(name: nil) { appearance in
+    if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+        NSColor(red: 0, green: 0.788, blue: 0.471, alpha: 1)
+    } else {
+        NSColor(red: 0, green: 0.60, blue: 0.36, alpha: 1)
+    }
+})
+
 struct MenuBarPopover: View {
     @EnvironmentObject var appState: AppState
     @State private var showSettings = false
@@ -8,27 +16,7 @@ struct MenuBarPopover: View {
     var body: some View {
         VStack(spacing: 0) {
             if showSettings {
-                // Settings header with back arrow
-                HStack {
-                    Button {
-                        showSettings = false
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .buttonStyle(.plain)
-
-                    Text("Settings")
-                        .font(.headline)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-
-                Divider()
-
-                SettingsPage(voiceManager: appState.voiceManager)
+                SettingsPage(showSettings: $showSettings, voiceManager: appState.voiceManager)
             } else {
                 MainPage(showSettings: $showSettings)
             }
@@ -101,6 +89,23 @@ private struct MainPage: View {
             .padding(.bottom, hasContent || appState.showCopiedConfirmation || !appState.displayTranscription.isEmpty ? 0 : 16)
             .transaction { $0.animation = nil }
 
+            // Show a processing indicator for engines that buffer audio before transcribing
+            if appState.isRecording
+                && appState.voiceManager.selectedEngineType != .native
+                && appState.voiceManager.partialTranscription.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Processing audio…")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .transition(.opacity)
+            }
+
             // Transcription text with inline chips (scrollable when popover hits max height)
             if !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -141,9 +146,10 @@ private struct MainPage: View {
     }
 }
 
-// MARK: - Settings Gear
+// MARK: - Settings Gear / Close Button
 
-/// Gear icon in the header. Click to open settings, option-click to quit.
+/// Gear icon that morphs into an X when settings are shown.
+/// Click gear → open settings. Click X → close settings. Option-click → quit.
 private struct SettingsGearButton: View {
     @Binding var showSettings: Bool
     @State private var isHovered = false
@@ -154,31 +160,43 @@ private struct SettingsGearButton: View {
             if optionHeld {
                 NSApplication.shared.terminate(nil)
             } else {
-                showSettings = true
+                showSettings.toggle()
             }
         } label: {
-            Image(systemName: "power")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.red)
-                .scaleEffect(optionHeld ? 1 : 0.5)
-                .blur(radius: optionHeld ? 0 : 3)
-                .opacity(optionHeld ? 1 : 0)
-                .overlay {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .scaleEffect(optionHeld ? 0.5 : 1)
-                        .blur(radius: optionHeld ? 3 : 0)
-                        .opacity(optionHeld ? 0 : 1)
-                }
-                .animation(.easeInOut(duration: 0.25), value: optionHeld)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+            ZStack {
+                // Power icon (option held)
+                Image(systemName: "power")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.red)
+                    .scaleEffect(optionHeld ? 1 : 0.5)
+                    .blur(radius: optionHeld ? 0 : 3)
+                    .opacity(optionHeld ? 1 : 0)
+
+                // Gear icon (main page, no option)
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .scaleEffect(!optionHeld && !showSettings ? 1 : 0.5)
+                    .blur(radius: !optionHeld && !showSettings ? 0 : 3)
+                    .opacity(!optionHeld && !showSettings ? 1 : 0)
+
+                // X icon (settings page, no option)
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .scaleEffect(!optionHeld && showSettings ? 1 : 0.5)
+                    .blur(radius: !optionHeld && showSettings ? 0 : 3)
+                    .opacity(!optionHeld && showSettings ? 1 : 0)
+            }
+            .animation(.easeInOut(duration: 0.25), value: optionHeld)
+            .animation(.easeInOut(duration: 0.25), value: showSettings)
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .opacity(isHovered ? 1 : 0.7)
-        .help(optionHeld ? "Quit Relay" : "Settings")
+        .help(optionHeld ? "Quit Relay" : showSettings ? "Close Settings" : "Settings")
     }
 }
 
@@ -222,13 +240,7 @@ private struct FooterButtonsView: View {
     var onCopy: () -> Void
     var onClear: () -> Void
 
-    private static let copiedColor = Color(nsColor: NSColor(name: nil) { appearance in
-        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
-            NSColor(red: 0, green: 0.788, blue: 0.471, alpha: 1)
-        } else {
-            NSColor(red: 0, green: 0.60, blue: 0.36, alpha: 1)
-        }
-    })
+    private static let copiedColor = successGreen
 
     /// Internal animated state, driven via `withAnimation` to be immune to parent transaction overrides.
     @State private var collapsed = false
@@ -304,56 +316,45 @@ private struct FooterButtonsView: View {
 
 private struct SettingsPage: View {
     @EnvironmentObject var appState: AppState
+    @Binding var showSettings: Bool
     @ObservedObject var voiceManager: VoiceManager
 
     var body: some View {
+        // Header — matches main page
+        HStack {
+            Text("Settings")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            SettingsGearButton(showSettings: $showSettings)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .transaction { $0.animation = nil }
+
         VStack(alignment: .leading, spacing: 8) {
             Text("Voice Engine")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker("Engine", selection: $voiceManager.selectedEngineType) {
-                ForEach(SpeechEngineType.allCases) { engine in
-                    Text(engine.label).tag(engine)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            if voiceManager.currentEngineNeedsDownload {
-                HStack {
-                    if voiceManager.isDownloading {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ProgressView(value: voiceManager.downloadProgress)
-                                .frame(maxWidth: .infinity)
-                            Text(voiceManager.downloadProgress < 0.3
-                                 ? "Downloading models\u{2026}"
-                                 : voiceManager.downloadProgress < 0.9
-                                 ? "Compiling CoreML models (first run)\u{2026}"
-                                 : "Initializing\u{2026}")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Text("\(Int(voiceManager.downloadProgress * 100))%")
-                            .font(.caption)
-                            .monospacedDigit()
-                    } else {
-                        Text("Model download required")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Download") {
-                            Task {
-                                await voiceManager.downloadModelIfNeeded()
-                            }
-                        }
-                        .controlSize(.small)
+            HStack(spacing: 6) {
+                Picker("Engine", selection: $voiceManager.selectedEngineType) {
+                    ForEach(SpeechEngineType.allCases) { engine in
+                        Text(engine.label).tag(engine)
                     }
                 }
-            } else {
-                Text("Ready")
-                    .font(.caption)
-                    .foregroundStyle(.green)
+                .pickerStyle(.segmented)
+                .disabled(voiceManager.isRecording)
+
+                if voiceManager.currentEngineNeedsDownload || voiceManager.isDownloading || voiceManager.downloadComplete {
+                    EngineDownloadButton(voiceManager: voiceManager)
+                } else if appState.isDemo {
+                    EngineDownloadButton(voiceManager: voiceManager, demo: true)
+                }
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 
@@ -386,14 +387,26 @@ private struct SettingsPage: View {
             Toggle("Push-to-talk", isOn: $appState.pushToTalk)
                 .font(.caption)
 
-            if appState.pushToTalk {
-                Toggle("Clean dictation (copy to clipboard)", isOn: $appState.cleanDictation)
+            Toggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
+                .font(.caption)
+
+            Divider()
+
+            Text("After Dictation")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle("Auto-copy dictation", isOn: $appState.autoCopyDictation)
+                .font(.caption)
+
+            Toggle("Auto-copy composed prompt", isOn: $appState.autoCopyComposedPrompt)
+                .font(.caption)
+
+            if appState.autoCopyDictation || appState.autoCopyComposedPrompt {
+                Toggle("Auto-paste to focused app", isOn: $appState.autoPasteAfterCopy)
                     .font(.caption)
                     .padding(.leading, 12)
             }
-
-            Toggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
-                .font(.caption)
 
             Divider()
 
@@ -408,6 +421,18 @@ private struct SettingsPage: View {
             }
             .pickerStyle(.segmented)
 
+            Text("Prompt Order")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+
+            Picker("Prompt order", selection: $appState.voiceNotePosition) {
+                ForEach(VoiceNotePosition.allCases) { position in
+                    Text(position.label).tag(position)
+                }
+            }
+            .pickerStyle(.segmented)
+
             Divider()
 
             HStack {
@@ -417,8 +442,8 @@ private struct SettingsPage: View {
                 ShortcutRecorderButton()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
     }
 }
 
@@ -545,5 +570,111 @@ private final class KeyHandlerNSView: NSView {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         super.removeFromSuperview()
+    }
+}
+
+// MARK: - Engine Download Button
+
+private enum DownloadPhase: Equatable {
+    case idle
+    case downloading
+    case done
+    case error
+}
+
+private extension View {
+    func phaseVisibility(_ visible: Bool) -> some View {
+        self
+            .opacity(visible ? 1 : 0)
+            .scaleEffect(visible ? 1 : 0.5)
+            .blur(radius: visible ? 0 : 4)
+    }
+}
+
+private struct EngineDownloadButton: View {
+    @ObservedObject var voiceManager: VoiceManager
+    var demo = false
+
+    private var phase: DownloadPhase {
+        if voiceManager.downloadComplete { return .done }
+        if voiceManager.isDownloading { return .downloading }
+        if voiceManager.error != nil { return .error }
+        return .idle
+    }
+
+    var body: some View {
+        let iconSize: CGFloat = 12
+
+        Button {
+            guard phase == .idle || phase == .error else { return }
+            voiceManager.error = nil
+            Task {
+                if demo {
+                    await voiceManager.simulateDownload()
+                } else {
+                    await voiceManager.downloadModelIfNeeded()
+                }
+            }
+        } label: {
+            ZStack {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: iconSize))
+                    .phaseVisibility(phase == .idle)
+
+                SpinnerIcon(size: iconSize)
+                    .phaseVisibility(phase == .downloading)
+
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(successGreen)
+                    .phaseVisibility(phase == .done)
+
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(.red)
+                    .phaseVisibility(phase == .error)
+            }
+            .animation(.easeInOut(duration: 0.3), value: phase)
+            .frame(width: 24, height: 24)
+            .background(Color.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(phase == .error ? "Download failed. Click to retry." : "Download model")
+    }
+}
+
+private struct SpinnerIcon: View {
+    let size: CGFloat
+    @State private var spinning = false
+
+    var body: some View {
+        Image(size: CGSize(width: size, height: size)) { ctx in
+            let center = CGPoint(x: size / 2, y: size / 2)
+            let rayCount = 8
+            let innerR = size * 0.2
+            let outerR = size * 0.46
+            let rayWidth = size * 0.14
+
+            for i in 0..<rayCount {
+                let angle = Angle.degrees(Double(i) / Double(rayCount) * 360 - 90)
+                let cos = cos(angle.radians)
+                let sin = sin(angle.radians)
+                let start = CGPoint(x: center.x + innerR * cos, y: center.y + innerR * sin)
+                let end = CGPoint(x: center.x + outerR * cos, y: center.y + outerR * sin)
+
+                var path = Path()
+                path.move(to: start)
+                path.addLine(to: end)
+
+                let opacity = 0.25 + 0.75 * (Double(i) / Double(rayCount - 1))
+                ctx.opacity = opacity
+                ctx.stroke(path, with: .foreground, style: StrokeStyle(lineWidth: rayWidth, lineCap: .round))
+            }
+        }
+        .frame(width: size, height: size)
+        .rotationEffect(.degrees(spinning ? 360 : 0))
+        .animation(.linear(duration: 1.2).repeatForever(autoreverses: false), value: spinning)
+        .onAppear { spinning = true }
     }
 }

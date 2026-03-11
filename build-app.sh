@@ -53,7 +53,7 @@ cat > "$APP_DIR/Info.plist" << PLIST
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Relay uses speech recognition to transcribe voice notes that are added to your prompt context.</string>
+	<string>Relay uses on-device speech recognition to transcribe voice notes. No audio data is sent to Apple.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Relay uses the microphone to record voice notes for transcription.</string>
 </dict>
