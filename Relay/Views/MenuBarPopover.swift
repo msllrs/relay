@@ -69,9 +69,17 @@ private struct MainPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
     @State private var shortcutDisplay = KeyboardShortcutModel.load().displayString
+    @State private var pinnedToBottom = true
 
     private var hasContent: Bool {
         !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems
+    }
+
+    /// Cap the scroll area so long transcriptions don't push the popover off screen.
+    /// Reserve ~200pt for the header, pill, and footer chrome.
+    private var maxScrollHeight: CGFloat {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
+        return screenHeight * 0.85 - 200
     }
 
     var body: some View {
@@ -126,18 +134,33 @@ private struct MainPage: View {
 
             // Transcription text with inline chips (scrollable when popover hits max height)
             if !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems {
-                ScrollView(.vertical, showsIndicators: false) {
-                    TranscriptionTextView(
-                        text: appState.displayTranscription,
-                        items: appState.stack.items,
-                        isRecording: appState.isRecording,
-                        onRemoveRef: { appState.removeRef($0) }
-                    )
-                    .padding(.horizontal, 16)
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        TranscriptionTextView(
+                            text: appState.displayTranscription,
+                            items: appState.stack.items,
+                            isRecording: appState.isRecording,
+                            onRemoveRef: { appState.removeRef($0) }
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, hasContent ? 0 : 16)
+                        .id("transcription-bottom")
+                    }
                     .padding(.top, 16)
-                    .padding(.bottom, hasContent ? 0 : 16)
+                    .onScrollGeometryChange(for: Bool.self) { geo in
+                        // Pinned when within 30pt of the bottom
+                        geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height < 30
+                    } action: { _, isPinned in
+                        pinnedToBottom = isPinned
+                    }
+                    .onChange(of: appState.displayTranscription) { _, _ in
+                        if appState.isRecording && pinnedToBottom {
+                            proxy.scrollTo("transcription-bottom", anchor: .bottom)
+                        }
+                    }
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: maxScrollHeight)
                 .fixedSize(horizontal: false, vertical: true)
                 .transition(.opacity.combined(with: .blurReplace(.downUp)))
             }
