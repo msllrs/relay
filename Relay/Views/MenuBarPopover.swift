@@ -118,6 +118,7 @@ private struct MainPage: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity.combined(with: .blurReplace(.downUp)))
             }
 
             // Footer: divider + action buttons
@@ -125,10 +126,15 @@ private struct MainPage: View {
                 hasContent: hasContent,
                 showCopiedConfirmation: appState.showCopiedConfirmation,
                 onCopy: { appState.copyPromptToClipboard() },
-                onClear: { appState.clearAll() }
+                onClear: {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        appState.clearAll()
+                    }
+                }
             )
             .fixedSize(horizontal: false, vertical: true)
         }
+        .animation(.easeInOut(duration: 0.25), value: hasContent)
         .background(PopoverKeyHandler(actions: {
             var actions: [Int: () -> Void] = [
                 kVK_ANSI_Comma: { showSettings = true },
@@ -136,7 +142,11 @@ private struct MainPage: View {
             ]
             if hasContent {
                 actions[kVK_ANSI_C] = { appState.copyPromptToClipboard() }
-                actions[kVK_Delete] = { appState.clearAll() }
+                actions[kVK_Delete] = {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        appState.clearAll()
+                    }
+                }
             }
             return actions
         }()))
