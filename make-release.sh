@@ -26,10 +26,11 @@ echo "$SIGNATURE"
 
 echo "=== Generating appcast ==="
 GENERATE_APPCAST=$(find .build/artifacts -name "generate_appcast" -type f 2>/dev/null | head -1)
+DOWNLOAD_PREFIX="https://github.com/msllrs/relay/releases/download/v${VERSION}/"
 if [ -z "$GENERATE_APPCAST" ]; then
     echo "Warning: generate_appcast not found. Skipping appcast generation."
 else
-    "$GENERATE_APPCAST" .build/
+    "$GENERATE_APPCAST" --download-url-prefix "$DOWNLOAD_PREFIX" .build/
     if [ -f .build/appcast.xml ]; then
         cp .build/appcast.xml appcast.xml
         echo "Updated appcast.xml"
