@@ -511,10 +511,19 @@ final class AppState: ObservableObject {
             ? String(full.dropFirst(transcriptionTrimOffset)).trimmingCharacters(in: .whitespaces)
             : ""
         let currentSession = insertRefMarkers(into: trimmed, refs: pendingRefs)
-        if frozenTranscription.isEmpty {
-            displayTranscription = currentSession
+        let newText = frozenTranscription.isEmpty
+            ? currentSession
+            : frozenTranscription + " " + currentSession
+
+        // Animate the structural transition when content first appears,
+        // so the popover height grows smoothly instead of snapping.
+        let wasEmpty = displayTranscription.isEmpty
+        if wasEmpty && !newText.isEmpty {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                displayTranscription = newText
+            }
         } else {
-            displayTranscription = frozenTranscription + " " + currentSession
+            displayTranscription = newText
         }
     }
 
