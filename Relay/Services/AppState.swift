@@ -75,6 +75,7 @@ final class AppState: ObservableObject {
     private var clearAfterCopyTask: Task<Void, Never>?
 
     let voiceManager = VoiceManager()
+    let updaterManager = UpdaterManager()
     private var clipboardMonitor: ClipboardMonitor?
     private(set) var hotkeyManager: HotkeyManager?
     private var cancellables = Set<AnyCancellable>()

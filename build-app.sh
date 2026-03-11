@@ -31,6 +31,14 @@ fi
 # Copy app icon
 cp Relay/Resources/AppIcon.icns "$APP_DIR/Resources/AppIcon.icns"
 
+# Embed Sparkle framework
+SPARKLE_FRAMEWORK=$(find .build/artifacts -path "*/Sparkle.framework" -type d 2>/dev/null | head -1)
+if [ -n "$SPARKLE_FRAMEWORK" ]; then
+    mkdir -p "$APP_DIR/Frameworks"
+    cp -R "$SPARKLE_FRAMEWORK" "$APP_DIR/Frameworks/"
+    echo "Embedded Sparkle.framework"
+fi
+
 cat > "$APP_DIR/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -56,6 +64,12 @@ cat > "$APP_DIR/Info.plist" << PLIST
 	<string>Relay uses on-device speech recognition to transcribe voice notes. No audio data is sent to Apple.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Relay uses the microphone to record voice notes for transcription.</string>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/msllrs/relay/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>yjYIMOT7YoSbNQlT34KAgyBprxyi6rAN9k8k205798g=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>
 PLIST
@@ -71,6 +85,9 @@ cat > /tmp/relay-entitlements.plist << 'ENT'
 </dict>
 </plist>
 ENT
+
+# Ensure @rpath resolves to the embedded Frameworks directory
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/MacOS/Relay" 2>/dev/null || true
 
 codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
 

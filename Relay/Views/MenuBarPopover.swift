@@ -19,7 +19,7 @@ struct MenuBarPopover: View {
     }
 
     private var settingsPage: some View {
-        SettingsPage(showSettings: $showSettings, voiceManager: appState.voiceManager)
+        SettingsPage(showSettings: $showSettings, voiceManager: appState.voiceManager, updaterManager: appState.updaterManager)
             .frame(width: 360, alignment: .topLeading)
     }
 
@@ -408,6 +408,7 @@ private struct SettingsPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
     @ObservedObject var voiceManager: VoiceManager
+    @ObservedObject var updaterManager: UpdaterManager
 
     var body: some View {
         VStack(spacing: 0) {
@@ -531,6 +532,30 @@ private struct SettingsPage: View {
                 Spacer()
                 ShortcutRecorderButton()
             }
+
+            Divider()
+
+            HStack {
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                    Text("v\(version)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Button("Check for Updates") {
+                    updaterManager.checkForUpdates()
+                }
+                .font(.caption)
+                .controlSize(.small)
+                .disabled(!updaterManager.canCheckForUpdates)
+            }
+
+            Button("Quit Relay") {
+                NSApplication.shared.terminate(nil)
+            }
+            .font(.caption)
+            .controlSize(.small)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
