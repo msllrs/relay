@@ -84,7 +84,7 @@ private struct MainPage: View {
                 onStop: { appState.finishDictationAndStop() }
             )
             .padding(.top, 2)
-            .padding(.bottom, hasContent || appState.showCopiedConfirmation || !appState.displayTranscription.isEmpty ? 0 : 16)
+            .padding(.bottom, hasContent || appState.showCopiedConfirmation ? 0 : 16)
 
             // Show a processing indicator for engines that buffer audio before transcribing
             if appState.isRecording
