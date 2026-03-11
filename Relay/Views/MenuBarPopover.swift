@@ -134,7 +134,7 @@ private struct MainPage: View {
         .animation(.easeInOut(duration: 0.25), value: hasContent)
         .background(PopoverKeyHandler(actions: {
             var actions: [Int: () -> Void] = [
-                kVK_ANSI_Comma: { showSettings = true },
+                kVK_ANSI_Comma: { withAnimation(.easeInOut(duration: 0.25)) { showSettings = true } },
                 kVK_ANSI_Q: { NSApplication.shared.terminate(nil) },
             ]
             if hasContent {
@@ -164,7 +164,9 @@ private struct SettingsGearButton: View {
             if optionHeld {
                 NSApplication.shared.terminate(nil)
             } else {
-                showSettings.toggle()
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showSettings.toggle()
+                }
             }
         } label: {
             ZStack {
