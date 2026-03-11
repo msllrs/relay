@@ -67,13 +67,11 @@ struct TranscriptionTextView: View {
     }
 
     private var segments: [Segment] {
-        // Limit displayed text for performance
-        let displayText = text.count > 500 ? String(text.suffix(500)) : text
         let resolved = nonVoiceItems
 
         let pattern = /\[ref:(\d+)\]/
         var result: [Segment] = []
-        var remaining = displayText[...]
+        var remaining = text[...]
         // Track word occurrences to create stable IDs even for duplicate words
         var wordCounts: [String: Int] = [:]
         // Track which 1-based item indices are referenced in the text
