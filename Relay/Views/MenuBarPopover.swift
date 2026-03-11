@@ -225,16 +225,17 @@ private struct FooterView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
                     .padding(.bottom, 16)
-            }
+                    .transition(.opacity)
 
-            if showCopiedConfirmation || hasContent {
                 FooterButtonsView(
                     showCopied: showCopiedConfirmation,
+                    hasContent: hasContent,
                     onCopy: onCopy,
                     onClear: onClear
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
+                .transition(.opacity.combined(with: .scale(0.95)).combined(with: .blurReplace))
             }
         }
     }
@@ -243,6 +244,7 @@ private struct FooterView: View {
 /// Animated footer buttons: Clear Stack collapses while Copy Prompt expands to "Copied!".
 private struct FooterButtonsView: View {
     let showCopied: Bool
+    let hasContent: Bool
     var onCopy: () -> Void
     var onClear: () -> Void
 
@@ -311,8 +313,18 @@ private struct FooterButtonsView: View {
             .onHover { copyHovered = $0 }
         }
         .onChange(of: showCopied) { _, newValue in
-            withAnimation(.snappy(duration: 0.35)) {
-                collapsed = newValue
+            if newValue {
+                withAnimation(.snappy(duration: 0.35)) {
+                    collapsed = true
+                }
+            } else if hasContent {
+                // Content still visible — animate the buttons back
+                withAnimation(.snappy(duration: 0.35)) {
+                    collapsed = false
+                }
+            } else {
+                // Footer is being removed — skip animation to avoid racing the exit transition
+                collapsed = false
             }
         }
     }
