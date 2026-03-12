@@ -99,6 +99,7 @@ private struct MainPage: View {
                 Text("Relay")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .offset(y: 1)
                     .onTapGesture {
                         guard appState.isDemo else { return }
                         appState.clearAll()
@@ -179,8 +180,8 @@ private struct MainPage: View {
                             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
                                 .frame(height: canScrollDown ? 24 : 0)
                         }
-                        .animation(.easeInOut(duration: 0.2), value: canScrollUp)
-                        .animation(.easeInOut(duration: 0.2), value: canScrollDown)
+                        .animation(.easeOut(duration: 0.12), value: canScrollUp)
+                        .animation(.easeOut(duration: 0.12), value: canScrollDown)
                     }
                 }
                 .padding(.top, 16)
@@ -324,6 +325,7 @@ private struct FooterButtonsView: View {
 
     /// Internal animated state, driven via `withAnimation` to be immune to parent transaction overrides.
     @State private var collapsed = false
+    @State private var checkmarkTrim: CGFloat = 0
     @State private var clearHovered = false
     @State private var copyHovered = false
 
@@ -365,11 +367,16 @@ private struct FooterButtonsView: View {
                         .scaleEffect(collapsed ? 0.5 : 1)
                         .opacity(collapsed ? 0 : 1)
                         .blur(radius: collapsed ? 4 : 0)
-                    Text("Copied!")
-                        .foregroundStyle(Self.copiedColor)
-                        .scaleEffect(collapsed ? 1 : 0.5)
-                        .opacity(collapsed ? 1 : 0)
-                        .blur(radius: collapsed ? 0 : 4)
+                    HStack(spacing: 6) {
+                        CheckmarkStroke(trim: checkmarkTrim)
+                            .stroke(Self.copiedColor, style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                            .frame(width: 8, height: 8)
+                        Text("Copied!")
+                    }
+                    .foregroundStyle(Self.copiedColor)
+                    .scaleEffect(collapsed ? 1 : 0.5)
+                    .opacity(collapsed ? 1 : 0)
+                    .blur(radius: collapsed ? 0 : 4)
                 }
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.primary.opacity(copyHovered ? 0.95 : 0.8))
@@ -386,19 +393,49 @@ private struct FooterButtonsView: View {
         }
         .onChange(of: showCopied) { _, newValue in
             if newValue {
+                checkmarkTrim = 0
                 withAnimation(.snappy(duration: 0.35)) {
                     collapsed = true
+                }
+                withAnimation(.easeOut(duration: 0.2).delay(0.08)) {
+                    checkmarkTrim = 1
                 }
             } else if hasContent {
                 // Content still visible — animate the buttons back
                 withAnimation(.snappy(duration: 0.35)) {
                     collapsed = false
                 }
+                checkmarkTrim = 0
             } else {
                 // Footer is being removed — skip animation to avoid racing the exit transition
                 collapsed = false
+                checkmarkTrim = 0
             }
         }
+    }
+}
+
+/// A checkmark path that can be drawn progressively via `.trim(from:to:)`.
+private struct CheckmarkStroke: Shape {
+    var trim: CGFloat
+
+    var animatableData: CGFloat {
+        get { trim }
+        set { trim = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        // Two-segment checkmark: down-stroke then up-stroke
+        let start = CGPoint(x: rect.minX, y: rect.midY)
+        let corner = CGPoint(x: rect.width * 0.35, y: rect.maxY)
+        let end = CGPoint(x: rect.maxX, y: rect.minY)
+
+        var full = Path()
+        full.move(to: start)
+        full.addLine(to: corner)
+        full.addLine(to: end)
+
+        return full.trimmedPath(from: 0, to: trim)
     }
 }
 
@@ -417,6 +454,7 @@ private struct SettingsPage: View {
                 Text("Settings")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .offset(y: 1)
 
                 Spacer()
 
