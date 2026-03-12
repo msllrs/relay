@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         popover.contentSize = NSSize(width: 360, height: 10) // height is dynamic
         popover.behavior = .transient // closes on click-outside and Esc
+        popover.animates = false // instant show/close prevents isShown race on rapid clicks
         popover.delegate = self
         popover.contentViewController = MaxHeightHostingController(
             rootView: MenuBarPopover()
@@ -73,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc private func togglePopover() {
         if popover.isShown {
-            popover.performClose(nil)
+            popover.close()
         } else {
             showPopover()
         }
