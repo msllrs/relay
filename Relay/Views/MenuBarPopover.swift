@@ -99,7 +99,11 @@ private struct MainPage: View {
                 Text("Relay")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .scaleEffect(showSettings ? 0.85 : 1, anchor: .leading)
+                    .blur(radius: showSettings ? 3 : 0)
+                    .opacity(showSettings ? 0 : 1)
                     .offset(y: 1)
+                    .animation(.easeInOut(duration: 0.25), value: showSettings)
                     .onTapGesture {
                         guard appState.isDemo else { return }
                         appState.clearAll()
@@ -454,7 +458,11 @@ private struct SettingsPage: View {
                 Text("Settings")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .scaleEffect(showSettings ? 1 : 0.85, anchor: .leading)
+                    .blur(radius: showSettings ? 0 : 3)
+                    .opacity(showSettings ? 1 : 0)
                     .offset(y: 1)
+                    .animation(.easeInOut(duration: 0.25), value: showSettings)
 
                 Spacer()
 
