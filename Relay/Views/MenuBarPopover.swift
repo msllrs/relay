@@ -291,6 +291,34 @@ private struct SettingsGearButton: View {
     }
 }
 
+// MARK: - Hover Link
+
+/// A text link that turns the URL chip blue on hover and uses a pointer cursor.
+private struct HoverLink: View {
+    let label: String
+    let url: String
+    @State private var isHovered = false
+
+    init(_ label: String, url: String) {
+        self.label = label
+        self.url = url
+    }
+
+    var body: some View {
+        Link(label, destination: URL(string: url)!)
+            .font(.caption)
+            .foregroundStyle(isHovered ? ContentType.url.chipColor : Color.secondary.opacity(0.6))
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+    }
+}
+
 // MARK: - Footer
 
 /// Always-visible footer with action buttons.
@@ -597,15 +625,11 @@ private struct SettingsPage: View {
                 Text("·")
                     .font(.caption)
                     .foregroundStyle(.quaternary)
-                Link("@msllrs", destination: URL(string: "https://x.com/msllrs")!)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                HoverLink("@msllrs", url: "https://x.com/msllrs")
                 Text("·")
                     .font(.caption)
                     .foregroundStyle(.quaternary)
-                Link("GitHub", destination: URL(string: "https://github.com/msllrs/relay")!)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                HoverLink("GitHub", url: "https://github.com/msllrs/relay")
                 Spacer()
                 Button("Check for Updates") {
                     updaterManager.checkForUpdates()
