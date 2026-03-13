@@ -47,85 +47,88 @@ struct SettingsPage: View {
 
     private var voiceSection: some View {
         SettingsSection("Voice") {
-            HStack(spacing: 6) {
-                Picker("Engine", selection: $voiceManager.selectedEngineType) {
-                    ForEach(SpeechEngineType.allCases) { engine in
-                        Text(engine.label).tag(engine)
+            SettingsRow("Engine") {
+                HStack(spacing: 6) {
+                    Picker("Engine", selection: $voiceManager.selectedEngineType) {
+                        ForEach(SpeechEngineType.allCases) { engine in
+                            Text(engine.label).tag(engine)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(voiceManager.isRecording)
+
+                    if voiceManager.currentEngineNeedsDownload || voiceManager.isDownloading || voiceManager.downloadComplete {
+                        EngineDownloadButton(voiceManager: voiceManager)
+                    } else if appState.isDemo {
+                        EngineDownloadButton(voiceManager: voiceManager, demo: true)
                     }
                 }
-                .pickerStyle(.segmented)
-                .disabled(voiceManager.isRecording)
-
-                if voiceManager.currentEngineNeedsDownload || voiceManager.isDownloading || voiceManager.downloadComplete {
-                    EngineDownloadButton(voiceManager: voiceManager)
-                } else if appState.isDemo {
-                    EngineDownloadButton(voiceManager: voiceManager, demo: true)
-                }
             }
-            .fixedSize(horizontal: false, vertical: true)
 
-            Picker("Input Device", selection: $appState.selectedInputDeviceID) {
-                Text("System Default").tag(UInt32(0))
-                ForEach(AudioDeviceManager.inputDevices()) { device in
-                    Text(device.name).tag(device.id)
+            SettingsRow("Input") {
+                Picker("Input", selection: $appState.selectedInputDeviceID) {
+                    Text("System Default").tag(UInt32(0))
+                    ForEach(AudioDeviceManager.inputDevices()) { device in
+                        Text(device.name).tag(device.id)
+                    }
                 }
+                .labelsHidden()
             }
-            .labelsHidden()
+
+            SettingsToggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
         }
     }
 
     private var behaviorSection: some View {
         SettingsSection("Behavior") {
-            SettingsToggle("Always-on monitoring", isOn: $appState.alwaysOnMonitoring)
-            SettingsToggle("Clear stack after copying", isOn: $appState.clearStackOnCopy)
-            SettingsToggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
-            SettingsToggle("Hotkey starts dictation", isOn: $appState.hotkeyStartsDictation)
             SettingsToggle("Push-to-talk", isOn: $appState.pushToTalk)
             SettingsToggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
+            SettingsToggle("Clear after copying", isOn: $appState.clearStackOnCopy)
         }
     }
 
     private var afterDictationSection: some View {
-        SettingsSection("After Dictation") {
+        SettingsSection("After dictation") {
             SettingsToggle("Auto-copy dictation", isOn: $appState.autoCopyDictation)
             SettingsToggle("Auto-copy composed prompt", isOn: $appState.autoCopyComposedPrompt)
 
             if appState.autoCopyDictation || appState.autoCopyComposedPrompt {
-                SettingsToggle("Auto-paste to focused app", isOn: $appState.autoPasteAfterCopy)
-                    .padding(.leading, 12)
+                SettingsToggle("Auto-paste to focused input", isOn: $appState.autoPasteAfterCopy)
             }
         }
     }
 
     private var promptSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SettingsSection("Prompt Format") {
+        SettingsSection("Prompt") {
+            SettingsRow("Format") {
                 Picker("Format", selection: $appState.promptFormat) {
                     ForEach(PromptFormat.allCases) { format in
                         Text(format.label).tag(format)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
             }
 
-            SettingsSection("Voice Notes") {
-                Picker("Voice notes", selection: $appState.voiceNotePosition) {
+            SettingsRow("Voice note") {
+                Picker("Voice note", selection: $appState.voiceNotePosition) {
                     ForEach(VoiceNotePosition.allCases) { position in
                         Text(position.label).tag(position)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
             }
         }
     }
 
     private var shortcutSection: some View {
-        HStack {
-            Text("Keyboard shortcut")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            ShortcutRecorderButton()
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            SettingsRow("Keyboard shortcut") {
+                ShortcutRecorderButton()
+            }
         }
     }
 
@@ -190,6 +193,27 @@ private struct SettingsSection<Content: View>: View {
     }
 }
 
+// MARK: - Settings Row
+
+private struct SettingsRow<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: Content
+
+    init(_ label: String, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
+            Spacer()
+            content
+        }
+    }
+}
+
 // MARK: - Settings Toggle
 
 private struct SettingsToggle: View {
@@ -202,10 +226,12 @@ private struct SettingsToggle: View {
     }
 
     var body: some View {
-        Toggle(label, isOn: $isOn)
-            .font(.caption)
-            .toggleStyle(.switch)
-            .controlSize(.mini)
+        SettingsRow(label) {
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+        }
     }
 }
 
