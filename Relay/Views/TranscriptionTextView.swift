@@ -10,12 +10,12 @@ struct TranscriptionTextView: View {
     @State private var animateText = false
 
     var body: some View {
-        FlowLayout(rowSpacing: 6, itemSpacing: 4, minRowHeight: 22) {
+        FlowLayout(rowSpacing: 4, itemSpacing: 4, minRowHeight: 20) {
             ForEach(segments) { segment in
                 switch segment.kind {
                 case .word(let word):
                     Text(word)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.primary.opacity(0.78))
                         .lineLimit(1)
                 case .chip(let index):

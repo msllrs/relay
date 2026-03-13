@@ -97,7 +97,7 @@ private struct MainPage: View {
             // Header
             HStack {
                 Text("Relay")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary)
                     .scaleEffect(showSettings ? 0.85 : 1, anchor: .leading)
                     .blur(radius: showSettings ? 3 : 0)
@@ -456,7 +456,7 @@ private struct SettingsPage: View {
             // Header — matches main page
             HStack {
                 Text("Settings")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary)
                     .scaleEffect(showSettings ? 1 : 0.85, anchor: .leading)
                     .blur(radius: showSettings ? 0 : 3)

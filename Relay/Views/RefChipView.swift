@@ -22,7 +22,7 @@ struct RefChipView: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 14, weight: .semibold))
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(contentType.chipColor)
             .padding(.vertical, 2)
             .padding(.horizontal, 8)
@@ -70,13 +70,13 @@ struct RefChipView: View {
                 .cornerRadius(4)
         } else if let text = previewText, !text.isEmpty {
             Text(text)
-                .font(.system(size: 12))
+                .font(.system(size: 11))
                 .foregroundStyle(.primary)
                 .lineLimit(8)
                 .textSelection(.enabled)
         } else {
             Text("No preview")
-                .font(.system(size: 12))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
     }
