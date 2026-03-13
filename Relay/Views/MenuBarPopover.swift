@@ -598,7 +598,7 @@ private struct SettingsPage: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
 
-            Picker("Prompt order", selection: $appState.voiceNotePosition) {
+            Picker("Voice notes", selection: $appState.voiceNotePosition) {
                 ForEach(VoiceNotePosition.allCases) { position in
                     Text(position.label).tag(position)
                 }
