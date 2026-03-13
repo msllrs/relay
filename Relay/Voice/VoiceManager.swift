@@ -2,6 +2,7 @@ import ApplicationServices
 import AVFoundation
 import CoreAudio
 import Foundation
+import SwiftUI
 
 /// Manages the active speech engine, recording state, and engine switching.
 @MainActor
@@ -94,7 +95,9 @@ final class VoiceManager: ObservableObject {
 
         error = nil
         partialTranscription = ""
-        isRecording = true
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isRecording = true
+        }
 
         let engine = activeEngine
         // Fall back to system default if the selected device is no longer available
@@ -125,7 +128,9 @@ final class VoiceManager: ObservableObject {
                 })
             } catch {
                 self.error = error.localizedDescription
-                self.isRecording = false
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.isRecording = false
+                }
             }
 
             // Max mic volume after engine starts (so it doesn't interfere with audio session setup)
@@ -139,7 +144,9 @@ final class VoiceManager: ObservableObject {
     func stopRecording(onComplete: @escaping @MainActor (String) -> Void) {
         guard isRecording else { return }
 
-        isRecording = false
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isRecording = false
+        }
         audioLevel = 0
 
         let engine = activeEngine
@@ -165,7 +172,9 @@ final class VoiceManager: ObservableObject {
         Task {
             await engine.cancel()
             self.restoreInputVolume()
-            self.isRecording = false
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self.isRecording = false
+            }
             self.partialTranscription = ""
             self.audioLevel = 0
         }

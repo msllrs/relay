@@ -94,14 +94,14 @@ private struct MainPage: View {
         let hasContent = hasContent
 
         VStack(spacing: 0) {
-            // Header
+            // Header — hides when recording to give more room to transcription
             HStack {
                 Text("Relay")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .scaleEffect(showSettings ? 0.85 : 1, anchor: .leading)
-                    .blur(radius: showSettings ? 3 : 0)
-                    .opacity(showSettings ? 0 : 1)
+                    .scaleEffect(showSettings || appState.isRecording ? 0.85 : 1, anchor: .leading)
+                    .blur(radius: showSettings || appState.isRecording ? 3 : 0)
+                    .opacity(showSettings || appState.isRecording ? 0 : 1)
                     .offset(y: 1)
                     .animation(.easeInOut(duration: 0.25), value: showSettings)
                     .onTapGesture {
@@ -112,10 +112,12 @@ private struct MainPage: View {
 
                 Spacer()
 
-                SettingsGearButton(showSettings: $showSettings)
+                SettingsGearButton(showSettings: $showSettings, isRecording: appState.isRecording)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, appState.isRecording ? 0 : 10)
+            .frame(height: appState.isRecording ? 0 : nil)
+            .clipped()
 
             // Prompt pill (idle or recording)
             PromptPillView(
@@ -125,7 +127,7 @@ private struct MainPage: View {
                 onStart: { appState.hotkeyTriggered() },
                 onStop: { appState.finishDictationAndStop() }
             )
-            .padding(.top, 2)
+            .padding(.top, appState.isRecording ? 16 : 2)
             .padding(.bottom, hasContent || appState.showCopiedConfirmation ? 0 : 16)
 
             // Show a processing indicator for engines that buffer audio before transcribing
@@ -233,8 +235,12 @@ private struct MainPage: View {
 /// Click gear → open settings. Click X → close settings. Option-click → quit.
 private struct SettingsGearButton: View {
     @Binding var showSettings: Bool
+    var isRecording: Bool = false
     @State private var isHovered = false
     @Environment(\.optionKeyHeld) private var optionHeld
+
+    /// Whether the gear/icon should be visible (hidden while recording).
+    private var visible: Bool { !isRecording }
 
     var body: some View {
         Button {
@@ -251,28 +257,29 @@ private struct SettingsGearButton: View {
                 Image(systemName: "power")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.red)
-                    .scaleEffect(optionHeld ? 1 : 0.5)
-                    .blur(radius: optionHeld ? 0 : 3)
-                    .opacity(optionHeld ? 1 : 0)
+                    .scaleEffect(optionHeld && visible ? 1 : 0.5)
+                    .blur(radius: optionHeld && visible ? 0 : 3)
+                    .opacity(optionHeld && visible ? 1 : 0)
 
                 // Gear icon (main page, no option)
                 Image(systemName: "gearshape")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .scaleEffect(!optionHeld && !showSettings ? 1 : 0.5)
-                    .blur(radius: !optionHeld && !showSettings ? 0 : 3)
-                    .opacity(!optionHeld && !showSettings ? 1 : 0)
+                    .scaleEffect(!optionHeld && !showSettings && visible ? 1 : 0.5)
+                    .blur(radius: !optionHeld && !showSettings && visible ? 0 : 3)
+                    .opacity(!optionHeld && !showSettings && visible ? 1 : 0)
 
                 // X icon (settings page, no option)
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .scaleEffect(!optionHeld && showSettings ? 1 : 0.5)
-                    .blur(radius: !optionHeld && showSettings ? 0 : 3)
-                    .opacity(!optionHeld && showSettings ? 1 : 0)
+                    .scaleEffect(!optionHeld && showSettings && visible ? 1 : 0.5)
+                    .blur(radius: !optionHeld && showSettings && visible ? 0 : 3)
+                    .opacity(!optionHeld && showSettings && visible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.25), value: optionHeld)
             .animation(.easeInOut(duration: 0.25), value: showSettings)
+            .animation(.easeInOut(duration: 0.25), value: isRecording)
             .offset(y: 1)
             .frame(width: 24, height: 24)
             .contentShape(Rectangle())

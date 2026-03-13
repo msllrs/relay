@@ -10,8 +10,17 @@ struct PromptPillView: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            if isRecording {
+        ZStack {
+            // Idle label
+            Text("Press \(shortcutDisplay) to start recording")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.45))
+                .scaleEffect(isRecording ? 0.5 : 1)
+                .opacity(isRecording ? 0 : 1)
+                .blur(radius: isRecording ? 3 : 0)
+
+            // Recording controls
+            HStack(spacing: 10) {
                 Button(action: onStop) {
                     ZStack {
                         Circle()
@@ -23,18 +32,16 @@ struct PromptPillView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .transition(.scaleBlur)
-            }
+                .scaleEffect(isRecording ? 1 : 0.5)
+                .opacity(isRecording ? 0.999 : 0)
+                .blur(radius: isRecording ? 0 : 3)
+                .allowsHitTesting(isRecording)
 
-            if isRecording {
                 WaveformBarsView(level: audioLevel)
                     .frame(height: 20)
-                    .transition(.scaleBlur)
-            } else {
-                Text("Press \(shortcutDisplay) to start recording")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.45))
-                    .transition(.scaleBlur)
+                    .scaleEffect(isRecording ? 1 : 0.5)
+                    .opacity(isRecording ? 1 : 0)
+                    .blur(radius: isRecording ? 0 : 3)
             }
         }
         .padding(.horizontal, 12)
@@ -50,34 +57,7 @@ struct PromptPillView: View {
             if !isRecording { onStart() }
         }
         .padding(.horizontal, 16)
-        .animation(.easeInOut(duration: 0.25), value: isRecording)
     }
 
     @Environment(\.colorScheme) private var colorScheme
 }
-
-private struct ScaleBlurTransition: ViewModifier, Animatable {
-    var progress: Double
-
-    nonisolated var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(1 - progress * 0.5)
-            .opacity(1 - progress)
-            .blur(radius: progress * 3)
-    }
-}
-
-private extension AnyTransition {
-    static var scaleBlur: AnyTransition {
-        .modifier(
-            active: ScaleBlurTransition(progress: 1),
-            identity: ScaleBlurTransition(progress: 0)
-        )
-    }
-}
-
