@@ -40,10 +40,29 @@ struct RecordingOverlayView: View {
 
     var body: some View {
         ZStack {
+            // Base fill
             Circle()
                 .fill(.black.opacity(0.7))
                 .frame(width: circleSize, height: circleSize)
                 .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+
+            // Outer edge: thin dark ring for definition
+            Circle()
+                .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                .frame(width: circleSize, height: circleSize)
+
+            // Inner highlight: top-weighted specular edge
+            Circle()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.35), .white.opacity(0.0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+                .frame(width: circleSize - 1, height: circleSize - 1)
+                .blendMode(.screen)
 
             switch mode {
             case .waveform:
@@ -62,6 +81,7 @@ struct RecordingOverlayView: View {
             }
         }
         .frame(width: circleSize, height: circleSize)
+        .padding(10) // room for shadow
         .contentShape(Circle())
         .onHover { hovering in
             isHovering = hovering
