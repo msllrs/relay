@@ -120,6 +120,16 @@ struct SettingsPage: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+
+            SettingsRow("Transcript") {
+                Picker("Transcript", selection: $appState.transcriptEnhancement) {
+                    ForEach(TranscriptEnhancement.allCases) { level in
+                        Text(level.label).tag(level)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
         }
     }
 

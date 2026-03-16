@@ -41,6 +41,9 @@ final class AppState: ObservableObject {
     @Published var voiceNotePosition: VoiceNotePosition {
         didSet { UserDefaults.standard.set(voiceNotePosition.rawValue, forKey: "voiceNotePosition") }
     }
+    @Published var transcriptEnhancement: TranscriptEnhancement {
+        didSet { UserDefaults.standard.set(transcriptEnhancement.rawValue, forKey: "transcriptEnhancement") }
+    }
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")
@@ -113,6 +116,7 @@ final class AppState: ObservableObject {
         }
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
+        self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -350,11 +354,17 @@ final class AppState: ObservableObject {
             }
 
             if let id = voiceNoteID {
-                let markedText = self.insertRefMarkers(into: transcription, refs: refs)
+                let markedText = TranscriptEnhancer.enhance(
+                    self.insertRefMarkers(into: transcription, refs: refs),
+                    level: self.transcriptEnhancement
+                )
                 self.stack.update(id: id, textContent: markedText)
                 self.freezeCurrentSession(markedText)
             } else {
-                let markedText = self.insertRefMarkers(into: transcription, refs: refs)
+                let markedText = TranscriptEnhancer.enhance(
+                    self.insertRefMarkers(into: transcription, refs: refs),
+                    level: self.transcriptEnhancement
+                )
                 let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
                 self.stack.add(item)
                 self.freezeCurrentSession(markedText)
