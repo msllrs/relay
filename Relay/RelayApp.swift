@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var lastIconState: MenuBarIconBuilder.IconState?
     private var dotLayer: CALayer?
     private var dotGeneration = 0
+    private var overlayController: RecordingOverlayController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -70,6 +71,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         cancellables.append(appState.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateIcon() })
+
+        // Show/hide recording overlay when recording state changes
+        overlayController = RecordingOverlayController(appState: appState)
+        cancellables.append(appState.$isRecording
+            .removeDuplicates()
+            .sink { [weak self] isRecording in
+                guard let self, let button = self.statusItem.button else { return }
+                if isRecording {
+                    self.overlayController?.show(below: button)
+                } else {
+                    self.overlayController?.hide()
+                }
+            })
     }
 
     @objc private func togglePopover() {
