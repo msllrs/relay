@@ -9,7 +9,7 @@ enum TranscriptEnhancement: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .off: "None"
+        case .off: "Raw"
         case .clean: "Clean"
         case .formatted: "Formatted"
         }
