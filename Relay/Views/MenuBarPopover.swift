@@ -44,7 +44,9 @@ struct MenuBarPopover: View {
         .clipped()
         .animation(.easeInOut(duration: 0.25), value: showSettings)
         .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { _ in
-            showSettings = false
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showSettings = false
+            }
         }
         .modifier(OptionKeyTracker())
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
@@ -78,6 +80,7 @@ private struct MainPage: View {
     @State private var pinnedToBottom = true
     @State private var canScrollUp = false
     @State private var canScrollDown = false
+    @State private var scrollContentHeight: CGFloat = 0
 
     private var hasContent: Bool {
         !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems
@@ -161,6 +164,11 @@ private struct MainPage: View {
                         .padding(.bottom, hasContent ? 0 : 16)
                         .id("transcription-bottom")
                     }
+                    .onScrollGeometryChange(for: CGFloat.self) { geo in
+                        geo.contentSize.height
+                    } action: { _, height in
+                        scrollContentHeight = height
+                    }
                     .onScrollGeometryChange(for: ScrollEdgeState.self) { geo in
                         let overflow = geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height
                         return ScrollEdgeState(
@@ -192,8 +200,7 @@ private struct MainPage: View {
                 }
                 .padding(.top, 16)
                 .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: maxScrollHeight)
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: min(scrollContentHeight, maxScrollHeight))
                 .transition(.opacity.combined(with: .blurReplace(.downUp)))
             }
 
