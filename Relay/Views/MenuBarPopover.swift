@@ -86,6 +86,12 @@ private struct MainPage: View {
         !appState.displayTranscription.isEmpty || appState.stack.hasNonVoiceItems
     }
 
+    private var showProcessingIndicator: Bool {
+        appState.isRecording
+            && appState.voiceManager.selectedEngineType != .native
+            && appState.voiceManager.partialTranscription.isEmpty
+    }
+
     /// Cap the scroll area so long transcriptions don't push the popover off screen.
     /// Reserve ~200pt for the header, pill, and footer chrome.
     private var maxScrollHeight: CGFloat {
@@ -131,12 +137,10 @@ private struct MainPage: View {
                 onStop: { appState.finishDictationAndStop() }
             )
             .padding(.top, appState.isRecording ? 16 : 2)
-            .padding(.bottom, hasContent || appState.showCopiedConfirmation ? 0 : 16)
+            .padding(.bottom, hasContent || appState.showCopiedConfirmation || showProcessingIndicator ? 0 : 16)
 
             // Show a processing indicator for engines that buffer audio before transcribing
-            if appState.isRecording
-                && appState.voiceManager.selectedEngineType != .native
-                && appState.voiceManager.partialTranscription.isEmpty {
+            if showProcessingIndicator {
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
@@ -147,6 +151,7 @@ private struct MainPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
+                .padding(.bottom, 16)
                 .transition(.opacity)
             }
 
