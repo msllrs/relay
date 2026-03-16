@@ -90,10 +90,9 @@ struct SettingsPage: View {
 
     private var afterDictationSection: some View {
         SettingsSection("After dictation") {
-            SettingsToggle("Auto-copy dictation", isOn: $appState.autoCopyDictation)
-            SettingsToggle("Auto-copy composed prompt", isOn: $appState.autoCopyComposedPrompt)
+            SettingsToggle("Auto-copy", isOn: $appState.autoCopy)
 
-            if appState.autoCopyDictation || appState.autoCopyComposedPrompt {
+            if appState.autoCopy {
                 SettingsToggle("Auto-paste to focused input", isOn: $appState.autoPasteAfterCopy)
             }
         }
@@ -211,6 +210,7 @@ private struct SettingsRow<Content: View>: View {
             Spacer()
             content
         }
+        .frame(minHeight: 24)
     }
 }
 
@@ -240,20 +240,42 @@ private struct SettingsToggle: View {
 private struct ShortcutRecorderButton: View {
     @EnvironmentObject var appState: AppState
     @State private var isRecording = false
-    @State private var displayString = KeyboardShortcutModel.load().displayString
+    @State private var currentShortcut = KeyboardShortcutModel.load()
+
+    private var isDefault: Bool { currentShortcut == .default }
 
     var body: some View {
-        Button(isRecording ? "Press shortcut..." : displayString) {
-            appState.hotkeyManager?.suspendMonitors()
-            isRecording = true
+        HStack(spacing: 4) {
+            if !isDefault {
+                Button {
+                    let shortcut = KeyboardShortcutModel.default
+                    appState.hotkeyManager?.suspendMonitors()
+                    appState.hotkeyManager?.updateShortcut(shortcut)
+                    appState.hotkeyManager?.resumeMonitors()
+                    currentShortcut = shortcut
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Reset to default (\(KeyboardShortcutModel.default.displayString))")
+                .transition(.scale.combined(with: .opacity))
+            }
+
+            Button(isRecording ? "Press shortcut..." : currentShortcut.displayString) {
+                appState.hotkeyManager?.suspendMonitors()
+                isRecording = true
+            }
+            .font(.caption.monospaced())
+            .controlSize(.small)
         }
-        .font(.caption.monospaced())
-        .controlSize(.small)
+        .animation(.easeInOut(duration: 0.2), value: isDefault)
         .background {
             if isRecording {
                 ShortcutCaptureView { shortcut in
                     appState.hotkeyManager?.updateShortcut(shortcut)
-                    displayString = shortcut.displayString
+                    currentShortcut = shortcut
                     isRecording = false
                     appState.hotkeyManager?.resumeMonitors()
                 } onCancel: {
