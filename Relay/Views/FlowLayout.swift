@@ -49,7 +49,12 @@ struct FlowLayout: Layout {
         var currentRowWidth: CGFloat = 0
 
         for (index, subview) in subviews.enumerated() {
-            let size = subview.sizeThatFits(.unspecified)
+            var size = subview.sizeThatFits(.unspecified)
+            // Clamp items that exceed the available width so they don't overflow
+            if size.width > maxWidth && maxWidth < .infinity {
+                size = subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+                size.width = min(size.width, maxWidth)
+            }
             let neededWidth = currentRowWidth > 0 ? size.width + itemSpacing : size.width
 
             if currentRowWidth + neededWidth > maxWidth && !rows[rows.count - 1].isEmpty {
