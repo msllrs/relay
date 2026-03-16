@@ -32,6 +32,9 @@ final class AppState: ObservableObject {
     @Published var autoPasteAfterCopy: Bool {
         didSet { UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy") }
     }
+    @Published var showRecordingOverlay: Bool {
+        didSet { UserDefaults.standard.set(showRecordingOverlay, forKey: "showRecordingOverlay") }
+    }
     @Published var promptFormat: PromptFormat {
         didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
     }
@@ -98,6 +101,11 @@ final class AppState: ObservableObject {
                 || UserDefaults.standard.bool(forKey: "autoCopyComposedPrompt")
         }
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
+        if UserDefaults.standard.object(forKey: "showRecordingOverlay") == nil {
+            self.showRecordingOverlay = true
+        } else {
+            self.showRecordingOverlay = UserDefaults.standard.bool(forKey: "showRecordingOverlay")
+        }
         if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil {
             self.maxMicOnRecord = true
         } else {

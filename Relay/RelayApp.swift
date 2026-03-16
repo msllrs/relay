@@ -10,6 +10,7 @@ final class MaxHeightHostingController<Content: View>: NSHostingController<Conte
     override var preferredContentSize: NSSize {
         get {
             var size = super.preferredContentSize
+            size.width = min(size.width, 360)
             if let screen = NSScreen.main {
                 size.height = min(size.height, screen.visibleFrame.height * Self.maxScreenFraction)
             }
@@ -78,10 +79,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .removeDuplicates()
             .sink { [weak self] isRecording in
                 guard let self, let button = self.statusItem.button else { return }
-                if isRecording {
+                if isRecording && self.appState.showRecordingOverlay {
                     self.overlayController?.show(below: button)
                 } else {
                     self.overlayController?.hide()
+                }
+            })
+
+        // Hide/show overlay immediately when the setting is toggled mid-recording
+        cancellables.append(appState.$showRecordingOverlay
+            .removeDuplicates()
+            .sink { [weak self] showOverlay in
+                guard let self else { return }
+                if self.appState.isRecording {
+                    if showOverlay, let button = self.statusItem.button {
+                        self.overlayController?.show(below: button)
+                    } else if !showOverlay {
+                        self.overlayController?.hide()
+                    }
                 }
             })
     }

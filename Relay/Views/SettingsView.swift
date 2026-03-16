@@ -84,6 +84,7 @@ struct SettingsPage: View {
         SettingsSection("Behavior") {
             SettingsToggle("Push-to-talk", isOn: $appState.pushToTalk)
             SettingsToggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
+            SettingsToggle("Show recording overlay", isOn: $appState.showRecordingOverlay)
             SettingsToggle("Clear after copying", isOn: $appState.clearStackOnCopy)
         }
     }
