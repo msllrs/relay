@@ -26,11 +26,8 @@ final class AppState: ObservableObject {
     @Published var captureClipboardOnStart: Bool {
         didSet { UserDefaults.standard.set(captureClipboardOnStart, forKey: "captureClipboardOnStart") }
     }
-    @Published var autoCopyDictation: Bool {
-        didSet { UserDefaults.standard.set(autoCopyDictation, forKey: "autoCopyDictation") }
-    }
-    @Published var autoCopyComposedPrompt: Bool {
-        didSet { UserDefaults.standard.set(autoCopyComposedPrompt, forKey: "autoCopyComposedPrompt") }
+    @Published var autoCopy: Bool {
+        didSet { UserDefaults.standard.set(autoCopy, forKey: "autoCopy") }
     }
     @Published var autoPasteAfterCopy: Bool {
         didSet { UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy") }
@@ -93,8 +90,13 @@ final class AppState: ObservableObject {
         }
         self.pushToTalk = UserDefaults.standard.bool(forKey: "pushToTalk")
         self.captureClipboardOnStart = UserDefaults.standard.bool(forKey: "captureClipboardOnStart")
-        self.autoCopyDictation = UserDefaults.standard.bool(forKey: "autoCopyDictation")
-        self.autoCopyComposedPrompt = UserDefaults.standard.bool(forKey: "autoCopyComposedPrompt")
+        if UserDefaults.standard.object(forKey: "autoCopy") != nil {
+            self.autoCopy = UserDefaults.standard.bool(forKey: "autoCopy")
+        } else {
+            // Migrate: enable if either old toggle was on
+            self.autoCopy = UserDefaults.standard.bool(forKey: "autoCopyDictation")
+                || UserDefaults.standard.bool(forKey: "autoCopyComposedPrompt")
+        }
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
         if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil {
             self.maxMicOnRecord = true
@@ -302,7 +304,9 @@ final class AppState: ObservableObject {
             voiceManager.startRecording()
             // Install Esc monitor to cancel
             hotkeyManager?.startEscMonitor { [weak self] in
-                self?.cancelDictation()
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self?.cancelDictation()
+                }
             }
             // Install keyUp monitor for push-to-talk
             if pushToTalk {
@@ -492,18 +496,12 @@ final class AppState: ObservableObject {
         }
         displayTranscription = frozenTranscription
 
-        // Auto-copy after dictation: composed prompt takes priority when both are on
-        if autoCopyComposedPrompt {
-
+        // Auto-copy after dictation
+        if autoCopy {
             copyPromptToClipboard()
-        } else if autoCopyDictation {
-
-            let rawText = frozenTranscription.replacing(/\s?\[ref:\d+\]/, with: "")
-            writeToClipboard(rawText)
-            flashCopiedConfirmation()
         }
 
-        if (autoCopyDictation || autoCopyComposedPrompt) && autoPasteAfterCopy {
+        if autoCopy && autoPasteAfterCopy {
             Task {
                 try? await Task.sleep(for: .milliseconds(100))
                 simulatePaste()
