@@ -63,9 +63,16 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
             AudioDeviceManager.setInputDevice(deviceID, on: engine)
         }
 
-        // Pass nil format to let Core Audio negotiate the correct format
+        // Pass nil format to let Core Audio negotiate the correct format.
+        // Skip initial buffers to avoid hardware startup transients that
+        // SFSpeechRecognizer can misinterpret as speech (e.g. "no").
+        var buffersToSkip = 3
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
-            request.append(buffer)
+            if buffersToSkip > 0 {
+                buffersToSkip -= 1
+            } else {
+                request.append(buffer)
+            }
 
             // Compute RMS for audio level metering
             guard let channelData = buffer.floatChannelData else { return }
