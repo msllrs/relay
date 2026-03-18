@@ -3,18 +3,19 @@
     <channel>
         <title>Relay</title>
         <item>
-            <title>0.3.1</title>
-            <pubDate>Wed, 18 Mar 2026 13:01:19 +0100</pubDate>
-            <sparkle:version>113</sparkle:version>
-            <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
+            <title>0.3.2</title>
+            <pubDate>Wed, 18 Mar 2026 13:07:35 +0100</pubDate>
+            <sparkle:version>114</sparkle:version>
+            <sparkle:shortVersionString>0.3.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## Fixes
 
 - Hotkey now works immediately after updating — no longer requires re-granting accessibility permission
-- Release notes now display at the correct font size in the update dialog
+- Removed disruptive accessibility prompt on launch that could prevent the hotkey from registering
+- Release notes display at the correct font size in the update dialog
 ]]></description>
-            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.1/Relay-v0.3.1.zip" length="5396489" type="application/octet-stream" sparkle:edSignature="m6B1fODqcIMyGB6+EVt5nIo6dQOVpAvaQGwHn6QroYuSw2B9cr0rKiqrVTMkA8GQM1vez6tjxsZui0dkr2x2BA=="/>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.2/Relay-v0.3.2.zip" length="5396036" type="application/octet-stream" sparkle:edSignature="xlFg5bGRSbLKhcgzclspo4CeufLNVjAG9z7NcfbNgbWumRdPQhdPJBqd7Zf0q3kcQBppshE0kvAzcQXxEEcnAQ=="/>
         </item>
     </channel>
 </rss>
