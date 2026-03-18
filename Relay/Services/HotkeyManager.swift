@@ -47,37 +47,22 @@ final class HotkeyManager {
         self.appState = appState
         self.currentShortcut = KeyboardShortcutModel.load()
         installCarbonHandler()
-        requestAccessibilityAndSetup()
+        // Carbon hotkey and local monitor work without accessibility — register immediately.
+        registerCarbonHotKey()
+        installLocalMonitor()
+        // Global NSEvent monitors require accessibility — request and gate behind it.
+        requestAccessibilityForGlobalMonitors()
     }
 
-    /// Request accessibility permissions (needed for global NSEvent monitors like key-up and escape).
-    /// Carbon hotkeys work without it, but push-to-talk key-up detection requires it.
-    private func requestAccessibilityAndSetup() {
-        let key = "AXTrustedCheckOptionPrompt" as CFString
-        let options = [key: true] as CFDictionary
-        let trusted = AXIsProcessTrustedWithOptions(options)
-        hotkeyLog.notice("AXIsProcessTrusted: \(trusted)")
-        if trusted {
-            setupMonitors()
-        } else {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                NSWorkspace.shared.open(url)
-            }
-            Task {
-                while !AXIsProcessTrusted() {
-                    try? await Task.sleep(for: .seconds(1))
-                }
-                hotkeyLog.notice("Accessibility granted, installing monitors")
-                setupMonitors()
-            }
-        }
-    }
+    // MARK: - Shortcut management
 
     func updateShortcut(_ shortcut: KeyboardShortcutModel) {
-        removeMonitors()
         currentShortcut = shortcut
         shortcut.save()
-        if !isSuspended { setupMonitors() }
+        if !isSuspended {
+            registerCarbonHotKey()
+            installLocalMonitor()
+        }
     }
 
     /// Temporarily disable monitors (e.g. while recording a new shortcut).
@@ -85,12 +70,14 @@ final class HotkeyManager {
 
     func suspendMonitors() {
         isSuspended = true
-        removeMonitors()
+        unregisterCarbonHotKey()
+        removeLocalMonitor()
     }
 
     func resumeMonitors() {
         isSuspended = false
-        setupMonitors()
+        registerCarbonHotKey()
+        installLocalMonitor()
     }
 
     // MARK: - Carbon Hot Key
@@ -130,16 +117,14 @@ final class HotkeyManager {
         )
     }
 
-    private func setupMonitors() {
-        let keyCode = currentShortcut.keyCode
-        let modifierFlags = currentShortcut.modifierFlags
-        hotkeyLog.notice("Setting up monitors for keyCode=\(keyCode) modifiers=\(modifierFlags.rawValue)")
-
-        // Register a system-level Carbon hotkey that consumes the keystroke.
-        let carbonMods = carbonModifiers(from: modifierFlags)
+    /// Registers the Carbon hotkey for the current shortcut. Does not require accessibility.
+    /// Safe to call unconditionally — re-registers if already registered.
+    private func registerCarbonHotKey() {
+        unregisterCarbonHotKey()
+        let carbonMods = carbonModifiers(from: currentShortcut.modifierFlags)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
-            UInt32(keyCode),
+            UInt32(currentShortcut.keyCode),
             carbonMods,
             kHotkeyID,
             GetApplicationEventTarget(),
@@ -148,12 +133,23 @@ final class HotkeyManager {
         )
         if status == noErr {
             hotKeyRef = ref
+            hotkeyLog.notice("RegisterEventHotKey succeeded for keyCode=\(self.currentShortcut.keyCode)")
         } else {
             hotkeyLog.error("RegisterEventHotKey failed: \(status)")
         }
+    }
 
-        // Local monitor still needed so the shortcut works when Relay itself is focused
-        // (Carbon hotkeys don't fire for the registering app's own key events).
+    private func unregisterCarbonHotKey() {
+        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+        hotKeyRef = nil
+    }
+
+    /// Installs the local NSEvent monitor so the shortcut works when Relay is focused.
+    /// Local monitors do not require accessibility.
+    private func installLocalMonitor() {
+        removeLocalMonitor()
+        let keyCode = currentShortcut.keyCode
+        let modifierFlags = currentShortcut.modifierFlags
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if !event.isARepeat,
                event.keyCode == keyCode,
@@ -165,16 +161,30 @@ final class HotkeyManager {
             }
             return event
         }
-
     }
 
-    private func removeMonitors() {
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-        }
-        hotKeyRef = nil
+    private func removeLocalMonitor() {
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         localMonitor = nil
+    }
+
+    // MARK: - Accessibility (global monitors only)
+
+    /// Requests accessibility permission needed for global NSEvent monitors (key-up, escape).
+    /// Carbon hotkey and local monitor are already registered unconditionally — this only
+    /// gates the global monitors that require accessibility.
+    private func requestAccessibilityForGlobalMonitors() {
+        let key = "AXTrustedCheckOptionPrompt" as CFString
+        let options = [key: true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        hotkeyLog.notice("AXIsProcessTrusted: \(trusted)")
+        if !trusted {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        // Global monitors are installed on demand in startEscMonitor / startKeyUpMonitor.
+        // Nothing else to do here — the Carbon hotkey already works.
     }
 
     func startEscMonitor(onEsc: @escaping @MainActor () -> Void) {
