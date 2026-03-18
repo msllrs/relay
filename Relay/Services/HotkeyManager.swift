@@ -29,6 +29,11 @@ private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
 @MainActor
 final class HotkeyManager {
     private weak var appState: AppState?
+
+    /// True when AXIsProcessTrusted() reports granted but global NSEvent monitors
+    /// return nil — the binary hash changed after an update and the TCC entry is stale.
+    private(set) var accessibilityBroken = false
+
     nonisolated(unsafe) private var hotKeyRef: EventHotKeyRef?
     nonisolated(unsafe) private var eventHandlerRef: EventHandlerRef?
     nonisolated(unsafe) private var localMonitor: Any?
@@ -159,6 +164,21 @@ final class HotkeyManager {
                 return nil
             }
             return event
+        }
+
+        // Detect stale TCC entry: AXIsProcessTrusted() returns true but global monitors
+        // are silently nil because the binary hash changed after an app update.
+        // Install a throw-away global monitor and check if it came back non-nil.
+        if AXIsProcessTrusted() {
+            let probe = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { _ in }
+            if let probe {
+                NSEvent.removeMonitor(probe)
+                accessibilityBroken = false
+            } else {
+                accessibilityBroken = true
+                hotkeyLog.warning("Global monitor returned nil despite AXIsProcessTrusted — TCC entry is stale after update")
+            }
+            appState?.accessibilityBroken = accessibilityBroken
         }
     }
 

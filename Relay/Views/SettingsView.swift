@@ -139,6 +139,9 @@ struct SettingsPage: View {
             SettingsRow("Keyboard shortcut") {
                 ShortcutRecorderButton()
             }
+            if appState.accessibilityBroken {
+                AccessibilityBrokenBanner()
+            }
         }
     }
 
@@ -295,6 +298,45 @@ private struct ShortcutRecorderButton: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Accessibility Broken Banner
+
+private struct AccessibilityBrokenBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Hotkey needs attention")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                Text("After updating Relay, macOS requires you to re-grant accessibility. Open Settings, remove Relay, re-add it, and toggle it back on.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Open Accessibility Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .font(.system(size: 11))
+                .controlSize(.small)
+                .padding(.top, 1)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.orange.opacity(0.25), lineWidth: 1)
+        )
     }
 }
 

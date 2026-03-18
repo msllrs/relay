@@ -53,6 +53,9 @@ final class AppState: ObservableObject {
     @Published var itemJustAdded = false
     @Published var isRecording = false
     @Published var displayTranscription = ""
+    /// True when accessibility permission appears granted in TCC but global NSEvent
+    /// monitors are silently broken — happens after an app update invalidates the binary hash.
+    @Published var accessibilityBroken = false
     let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
     private var demoScenarioIndex = 0
     private static let demoScenarioCount = 2
