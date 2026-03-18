@@ -3,43 +3,18 @@
     <channel>
         <title>Relay</title>
         <item>
-            <title>0.3.0</title>
-            <pubDate>Wed, 18 Mar 2026 09:37:30 +0100</pubDate>
-            <sparkle:version>109</sparkle:version>
-            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+            <title>0.3.1</title>
+            <pubDate>Wed, 18 Mar 2026 13:01:19 +0100</pubDate>
+            <sparkle:version>113</sparkle:version>
+            <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[## What's New
+            <description sparkle:format="markdown"><![CDATA[## Fixes
 
-### Transcript Enhancement
-Voice notes can now be cleaned up before hitting the clipboard. A new **Transcript** setting in the Prompt section offers three levels:
-- **Raw** — current behavior, no changes
-- **Clean** — removes filler words (um, uh, you know, basically, etc.)
-- **Formatted** — Clean + capitalizes sentences, adds trailing punctuation, deduplicates adjacent words
-
-`[ref:N]` markers are preserved through all enhancement levels.
-
-### Recording Overlay
-- Draggable floating overlay shows waveform and stop button during recording
-- Snaps back to menu bar icon position when dragged near it
-- New "Show recording overlay" toggle in Behavior settings
-
-### UI Polish
-- Redesigned settings with consistent two-column layout
-- Scroll fade masks on long transcriptions
-- Blur/scale morph transitions on page titles
-- Hover effects on footer links
-- Animated escape-key cancel
-- Consolidated auto-copy toggles
-
-### Fixes
-- Fix popover unresponsiveness on rapid menu bar clicks
-- Skip initial audio buffers to prevent phantom transcription
-- Clamp oversized flow layout items to container width
-- Fix processing audio indicator spacing
-- Use Carbon RegisterEventHotKey to properly consume global shortcuts
+- Hotkey now works immediately after updating — no longer requires re-granting accessibility permission
+- Release notes now display at the correct font size in the update dialog
 ]]></description>
-            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.0/Relay-v0.3.0.zip" length="5391358" type="application/octet-stream" sparkle:edSignature="7k3Oa8RTnkEu/j27ssmIF3S+CpZK8J7eQOaxwsJWcScW4fY+LoaVQaHbfYPVpSuQvgsN2+Gh8waIELPwuS5wCA=="/>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.1/Relay-v0.3.1.zip" length="5396489" type="application/octet-stream" sparkle:edSignature="m6B1fODqcIMyGB6+EVt5nIo6dQOVpAvaQGwHn6QroYuSw2B9cr0rKiqrVTMkA8GQM1vez6tjxsZui0dkr2x2BA=="/>
         </item>
     </channel>
 </rss>
