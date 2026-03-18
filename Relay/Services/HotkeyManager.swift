@@ -166,20 +166,6 @@ final class HotkeyManager {
             return event
         }
 
-        // Detect stale TCC entry: AXIsProcessTrusted() returns true but global monitors
-        // are silently nil because the binary hash changed after an app update.
-        // Install a throw-away global monitor and check if it came back non-nil.
-        if AXIsProcessTrusted() {
-            let probe = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { _ in }
-            if let probe {
-                NSEvent.removeMonitor(probe)
-                accessibilityBroken = false
-            } else {
-                accessibilityBroken = true
-                hotkeyLog.warning("Global monitor returned nil despite AXIsProcessTrusted — TCC entry is stale after update")
-            }
-            appState?.accessibilityBroken = accessibilityBroken
-        }
     }
 
     private func removeMonitors() {
@@ -211,6 +197,10 @@ final class HotkeyManager {
             }
             return event
         }
+
+        // If the global monitor returned nil despite accessibility appearing granted,
+        // the TCC entry is stale (binary hash changed after an update).
+        detectAccessibilityBrokenIfNeeded(globalMonitor: escGlobalMonitor)
     }
 
     func stopEscMonitor() {
@@ -241,6 +231,23 @@ final class HotkeyManager {
                 return nil
             }
             return event
+        }
+
+        detectAccessibilityBrokenIfNeeded(globalMonitor: globalKeyUpMonitor)
+    }
+
+    /// If a global NSEvent monitor returned nil despite AXIsProcessTrusted() being true,
+    /// the TCC entry is stale — the binary hash changed after a Sparkle update.
+    /// Surfaces the broken state so the UI can warn the user.
+    private func detectAccessibilityBrokenIfNeeded(globalMonitor: Any?) {
+        guard AXIsProcessTrusted() else { return }
+        let broken = globalMonitor == nil
+        if broken != accessibilityBroken {
+            accessibilityBroken = broken
+            appState?.accessibilityBroken = broken
+            if broken {
+                hotkeyLog.warning("Global monitor is nil despite AXIsProcessTrusted — TCC entry is stale after update")
+            }
         }
     }
 
