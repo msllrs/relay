@@ -5,7 +5,7 @@
         <item>
             <title>0.3.0</title>
             <pubDate>Wed, 18 Mar 2026 09:37:30 +0100</pubDate>
-            <sparkle:version>105</sparkle:version>
+            <sparkle:version>109</sparkle:version>
             <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
@@ -39,7 +39,7 @@ Voice notes can now be cleaned up before hitting the clipboard. A new **Transcri
 - Fix processing audio indicator spacing
 - Use Carbon RegisterEventHotKey to properly consume global shortcuts
 ]]></description>
-            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.0/Relay-v0.3.0.zip" length="5389064" type="application/octet-stream" sparkle:edSignature="d2GaLID7ajuGeswMcW+ZodYIwMwIRK70oNlLij+Ye92XjFWkbi9XaFYnVBbtrY+bgLi+R21khnc3wnejIW/kAA=="/>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.0/Relay-v0.3.0.zip" length="5391358" type="application/octet-stream" sparkle:edSignature="7k3Oa8RTnkEu/j27ssmIF3S+CpZK8J7eQOaxwsJWcScW4fY+LoaVQaHbfYPVpSuQvgsN2+Gh8waIELPwuS5wCA=="/>
         </item>
     </channel>
 </rss>

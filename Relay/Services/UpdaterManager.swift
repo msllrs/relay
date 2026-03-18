@@ -57,7 +57,7 @@ extension UpdaterManager: SPUStandardUserDriverDelegate {
     /// surrounding UI text. Bold weight is preserved so headers remain distinct.
     nonisolated func standardUserDriverWillShowReleaseNotesText(
         _ releaseNotesAttributedString: NSAttributedString,
-        for update: SUAppcastItem,
+        forUpdate update: SUAppcastItem,
         withBundleDisplayVersion bundleDisplayVersion: String,
         bundleVersion: String
     ) -> NSAttributedString? {
