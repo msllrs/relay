@@ -261,7 +261,7 @@ struct SettingsGearButton: View {
                 // Power icon (option held)
                 Image(systemName: "power")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(isHovered ? .red : .secondary)
                     .scaleEffect(optionHeld && visible ? 1 : 0.5)
                     .blur(radius: optionHeld && visible ? 0 : 3)
                     .opacity(optionHeld && visible ? 1 : 0)

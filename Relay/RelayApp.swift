@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .removeDuplicates()
             .sink { [weak self] isRecording in
                 guard let self, let button = self.statusItem.button else { return }
-                if isRecording && self.appState.showRecordingOverlay {
+                if isRecording && self.appState.showRecordingOverlay && !self.popover.isShown {
                     self.overlayController?.show(below: button)
                 } else {
                     self.overlayController?.hide()
@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .removeDuplicates()
             .sink { [weak self] showOverlay in
                 guard let self else { return }
-                if self.appState.isRecording {
+                if self.appState.isRecording && !self.popover.isShown {
                     if showOverlay, let button = self.statusItem.button {
                         self.overlayController?.show(below: button)
                     } else if !showOverlay {
@@ -113,6 +113,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
+    }
+
+    // MARK: - NSPopoverDelegate
+
+    func popoverDidShow(_ notification: Notification) {
+        overlayController?.hide()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        if appState.isRecording, appState.showRecordingOverlay, let button = statusItem.button {
+            overlayController?.show(below: button)
+        }
     }
 
     private func updateIcon() {
