@@ -303,6 +303,7 @@ final class AppState: ObservableObject {
 
     /// Called by HotkeyManager when the keyboard shortcut is pressed.
     func hotkeyTriggered() {
+
         if isMonitoring && voiceManager.isRecording {
             // Already recording → stop, save transcription, stop monitoring
             finishDictationAndStop()

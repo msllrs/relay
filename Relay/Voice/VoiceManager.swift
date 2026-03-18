@@ -86,13 +86,6 @@ final class VoiceManager: ObservableObject {
     func startRecording() {
         guard !isRecording else { return }
 
-        // Ensure Accessibility is granted before requesting mic permission.
-        // On first launch both prompts fire at once and macOS hides one behind the other.
-        if !AXIsProcessTrusted() {
-            error = "Accessibility permission required. Grant it in System Settings > Privacy & Security > Accessibility, then try again."
-            return
-        }
-
         error = nil
         partialTranscription = ""
         withAnimation(.easeInOut(duration: 0.25)) {

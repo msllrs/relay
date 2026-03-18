@@ -47,10 +47,8 @@ final class HotkeyManager {
         self.appState = appState
         self.currentShortcut = KeyboardShortcutModel.load()
         installCarbonHandler()
-        // Carbon hotkey and local monitor work without accessibility — register immediately.
         registerCarbonHotKey()
         installLocalMonitor()
-        // Global NSEvent monitors require accessibility — request and gate behind it.
         requestAccessibilityForGlobalMonitors()
     }
 
@@ -170,21 +168,17 @@ final class HotkeyManager {
 
     // MARK: - Accessibility (global monitors only)
 
-    /// Requests accessibility permission needed for global NSEvent monitors (key-up, escape).
-    /// Carbon hotkey and local monitor are already registered unconditionally — this only
-    /// gates the global monitors that require accessibility.
+    /// Checks accessibility silently at launch — no prompt, no System Settings redirect.
+    /// The Carbon hotkey and local monitor already work without accessibility.
+    /// Global monitors (key-up, escape) are installed on demand; if accessibility isn't
+    /// granted at that point the user will see the Settings banner instead of a disruptive
+    /// launch-time dialog.
     private func requestAccessibilityForGlobalMonitors() {
-        let key = "AXTrustedCheckOptionPrompt" as CFString
-        let options = [key: true] as CFDictionary
-        let trusted = AXIsProcessTrustedWithOptions(options)
-        hotkeyLog.notice("AXIsProcessTrusted: \(trusted)")
-        if !trusted {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                NSWorkspace.shared.open(url)
-            }
-        }
-        // Global monitors are installed on demand in startEscMonitor / startKeyUpMonitor.
-        // Nothing else to do here — the Carbon hotkey already works.
+        let trusted = AXIsProcessTrusted()
+        hotkeyLog.notice("AXIsProcessTrusted at launch: \(trusted)")
+        // No prompt here — the hotkey works without accessibility. If the user tries
+        // push-to-talk or escape cancel and accessibility is missing, the banner in
+        // Settings will guide them.
     }
 
     func startEscMonitor(onEsc: @escaping @MainActor () -> Void) {
@@ -250,7 +244,14 @@ final class HotkeyManager {
     /// the TCC entry is stale — the binary hash changed after a Sparkle update.
     /// Surfaces the broken state so the UI can warn the user.
     private func detectAccessibilityBrokenIfNeeded(globalMonitor: Any?) {
-        guard AXIsProcessTrusted() else { return }
+        if !AXIsProcessTrusted() {
+            // Not granted yet — open System Settings so user can grant it.
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+            return
+        }
+        // Granted but monitor is nil — stale TCC entry after an update.
         let broken = globalMonitor == nil
         if broken != accessibilityBroken {
             accessibilityBroken = broken
