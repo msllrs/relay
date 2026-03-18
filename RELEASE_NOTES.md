@@ -1,15 +1,4 @@
-<?xml version="1.0" standalone="yes"?>
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
-    <channel>
-        <title>Relay</title>
-        <item>
-            <title>0.3.0</title>
-            <pubDate>Wed, 18 Mar 2026 09:37:30 +0100</pubDate>
-            <sparkle:version>105</sparkle:version>
-            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[## What's New
+## What's New
 
 ### Transcript Enhancement
 Voice notes can now be cleaned up before hitting the clipboard. A new **Transcript** setting in the Prompt section offers three levels:
@@ -38,8 +27,3 @@ Voice notes can now be cleaned up before hitting the clipboard. A new **Transcri
 - Clamp oversized flow layout items to container width
 - Fix processing audio indicator spacing
 - Use Carbon RegisterEventHotKey to properly consume global shortcuts
-]]></description>
-            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.0/Relay-v0.3.0.zip" length="5389064" type="application/octet-stream" sparkle:edSignature="d2GaLID7ajuGeswMcW+ZodYIwMwIRK70oNlLij+Ye92XjFWkbi9XaFYnVBbtrY+bgLi+R21khnc3wnejIW/kAA=="/>
-        </item>
-    </channel>
-</rss>

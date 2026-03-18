@@ -30,7 +30,16 @@ DOWNLOAD_PREFIX="https://github.com/msllrs/relay/releases/download/v${VERSION}/"
 if [ -z "$GENERATE_APPCAST" ]; then
     echo "Warning: generate_appcast not found. Skipping appcast generation."
 else
-    "$GENERATE_APPCAST" --download-url-prefix "$DOWNLOAD_PREFIX" .build/
+    # Copy release notes as a sidecar so generate_appcast embeds them in <description>
+    if [ -f RELEASE_NOTES.md ]; then
+        cp RELEASE_NOTES.md ".build/Relay-v${VERSION}.md"
+        echo "Copied RELEASE_NOTES.md → .build/Relay-v${VERSION}.md"
+    else
+        echo "Warning: RELEASE_NOTES.md not found. Update dialog will have no release notes."
+    fi
+    # Remove stale appcast so generate_appcast treats the entry as new (enabling --embed-release-notes)
+    rm -f .build/appcast.xml
+    "$GENERATE_APPCAST" --download-url-prefix "$DOWNLOAD_PREFIX" --embed-release-notes .build/
     if [ -f .build/appcast.xml ]; then
         cp .build/appcast.xml appcast.xml
         echo "Updated appcast.xml"
