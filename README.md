@@ -15,8 +15,10 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 - **Clipboard capture** — Automatically collects what you copy with content type detection (code, URL, terminal, JSON, text)
 - **Screenshots, files, and folders** — Drag and drop images, files, or entire folders to add them as context
 - **Voice notes** — Record and transcribe with native macOS speech recognition, WhisperKit, or Parakeet
+- **Recording overlay** — A draggable floating indicator that shows live audio levels, flashes on new clipboard captures, and doubles as a stop button
 - **Prompt composition** — Generates structured prompts in Markdown format, with an option to switch to XML
 - **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation
+- **Transcript cleanup** — Three modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), and Formatted (clean + capitalization, deduplication, punctuation)
 - **Global hotkey** — Customizable keyboard shortcut for recording and composing
 
 ## Install
@@ -35,6 +37,10 @@ open .build/Relay.app
 ```
 
 Use `./build-app.sh --release` for an optimized build. Use `./make-dmg.sh` to create a distributable DMG.
+
+## Troubleshooting
+
+**Global hotkey stops toggling recording** — On older versions, the hotkey could get into a state where it no longer started or stopped recording correctly. This was fixed in v0.3.3. If you're on an older version, update or reinstall from [Releases](https://github.com/msllrs/relay/releases).
 
 ## License
 
