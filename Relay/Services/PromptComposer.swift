@@ -30,7 +30,9 @@ enum VoiceNotePosition: String, CaseIterable, Identifiable {
 
 enum PromptComposer {
     static func compose(items: [ClipboardItem], format: PromptFormat = .xml, voiceNotePosition: VoiceNotePosition = .top) -> String {
-        let ordered = reorder(items: items, position: voiceNotePosition)
+        // Drop voice notes with no content (leftover placeholders from cancelled/empty sessions)
+        let cleaned = items.filter { $0.contentType != .voiceNote || !($0.textContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let ordered = reorder(items: cleaned, position: voiceNotePosition)
         switch format {
         case .xml: return composeXML(items: ordered)
         case .markdown: return composeMarkdown(items: ordered)
