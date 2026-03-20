@@ -67,6 +67,9 @@ enum TranscriptEnhancer {
             return ""
         }
 
+        // Context-aware filler removal (like, right)
+        working = removeContextFillers(working)
+
         // Always-remove filler words (word-boundary)
         let alwaysRemovePattern = /\b(?:um|uh|uhh|hmm|basically|actually|literally)\b/
             .ignoresCase()
@@ -93,6 +96,71 @@ enum TranscriptEnhancer {
             if let range = working.range(of: sentinel) {
                 working.replaceSubrange(range, with: ref)
             }
+        }
+
+        return working
+    }
+
+    // MARK: - Context-aware filler removal
+
+    /// Remove filler "like" and "right" using preceding/following context to distinguish
+    /// from meaningful uses (e.g. "I like this", "looks like a bug", "the right approach").
+    private static func removeContextFillers(_ text: String) -> String {
+        var working = text
+
+        // Rule 1: "like" after conjunction — "and like X" → "and X"
+        let likeAfterConjunction = /\b(and|but|or|so|then|because)\s+like\s+/
+            .ignoresCase()
+        working = working.replacing(likeAfterConjunction) { match in
+            String(match.output.1) + " "
+        }
+
+        // Rule 2: Sentence/clause-initial "like" before pronoun/determiner
+        // Matches start-of-string or after sentence boundary
+        let likeInitial = /(?:^|[.!?]\s+)like\s+(?=(?:I|we|he|she|it|they|you|the|this|that|these|those|my|our|his|her|its|their|your|a|an|some|every|each)\b)/
+            .ignoresCase()
+        working = working.replacing(likeInitial) { match in
+            let full = String(match.output)
+            // Keep sentence boundary if present
+            if let dotRange = full.rangeOfCharacter(from: CharacterSet(charactersIn: ".!?")) {
+                let prefix = full[full.startIndex...dotRange.lowerBound]
+                return String(prefix) + " "
+            }
+            return ""
+        }
+
+        // Rule 3: "like" before intensifier after copula — "it's like really X" → "it's really X"
+        // Only fires after copula forms to avoid removing meaningful "like" (e.g. "I like really good code")
+        let likeBeforeIntensifier = /(\'s|\'m|\'re|was|were|is|are|am|been)\s+like\s+(really|very|totally|just|super|pretty|absolutely|completely|extremely)\b/
+            .ignoresCase()
+        working = working.replacing(likeBeforeIntensifier) { match in
+            String(match.output.1) + " " + String(match.output.2)
+        }
+
+        // Rule 4: "like" before "not" after copula — "it's like not working" → "it's not working"
+        let likeBeforeNot = /(\'s|\'m|\'re|was|were|is|are|am|been)\s+like\s+(not)\b/
+            .ignoresCase()
+        working = working.replacing(likeBeforeNot) { match in
+            String(match.output.1) + " " + String(match.output.2)
+        }
+
+        // Rule 5: Filler "right" — after conjunction + before pronoun/determiner (very narrow)
+        let fillerRight = /\b(and|but|or|so|then|because)\s+right\s+(?=(?:I|we|he|she|it|they|you|the|this|that|these|those|my|our|his|her|its|their|your|a|an)\b)/
+            .ignoresCase()
+        working = working.replacing(fillerRight) { match in
+            String(match.output.1) + " "
+        }
+
+        // Rule 6: Sentence-initial "right" before pronoun/determiner
+        let rightInitial = /(?:^|[.!?]\s+)right\s+(?=(?:I|we|he|she|it|they|you|the|this|that|these|those|my|our|his|her|its|their|your|a|an)\b)/
+            .ignoresCase()
+        working = working.replacing(rightInitial) { match in
+            let full = String(match.output)
+            if let dotRange = full.rangeOfCharacter(from: CharacterSet(charactersIn: ".!?")) {
+                let prefix = full[full.startIndex...dotRange.lowerBound]
+                return String(prefix) + " "
+            }
+            return ""
         }
 
         return working
