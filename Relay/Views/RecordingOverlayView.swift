@@ -22,6 +22,48 @@ struct MiniWaveformView: View {
     }
 }
 
+/// Custom SVG icon shown when a clipboard item is captured during recording.
+struct ClipboardRelayIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let sx = size.width / 16
+            let sy = size.height / 16
+            let style = StrokeStyle(lineWidth: 1.5, lineCap: .round)
+
+            // Top line: M1 2.5 h14
+            var top = Path()
+            top.move(to: CGPoint(x: 1 * sx, y: 2 * sy))
+            top.addLine(to: CGPoint(x: 15 * sx, y: 2 * sy))
+            context.stroke(top, with: .color(.white.opacity(0.64)), style: style)
+
+            // Middle capsule: M13 6 H3 a2 2 0 1 0 0 4 h10 a2 2 0 1 0 0 -4
+            var capsule = Path()
+            capsule.move(to: CGPoint(x: 13 * sx, y: 6 * sy))
+            capsule.addLine(to: CGPoint(x: 3 * sx, y: 6 * sy))
+            capsule.addRelativeArc(
+                center: CGPoint(x: 3 * sx, y: 8 * sy),
+                radius: 2 * sy,
+                startAngle: .degrees(-90),
+                delta: .degrees(-180)
+            )
+            capsule.addLine(to: CGPoint(x: 13 * sx, y: 10 * sy))
+            capsule.addRelativeArc(
+                center: CGPoint(x: 13 * sx, y: 8 * sy),
+                radius: 2 * sy,
+                startAngle: .degrees(90),
+                delta: .degrees(-180)
+            )
+            context.stroke(capsule, with: .color(.white), style: style)
+
+            // Bottom line: M1 13.5 h14
+            var bottom = Path()
+            bottom.move(to: CGPoint(x: 1 * sx, y: 14 * sy))
+            bottom.addLine(to: CGPoint(x: 15 * sx, y: 14 * sy))
+            context.stroke(bottom, with: .color(.white.opacity(0.64)), style: style)
+        }
+    }
+}
+
 struct RecordingOverlayView: View {
     @EnvironmentObject private var appState: AppState
     @State private var isHovering = false
@@ -69,9 +111,8 @@ struct RecordingOverlayView: View {
                 MiniWaveformView(level: appState.voiceManager.audioLevel)
                     .transition(.opacity.combined(with: .scale))
             case .clipboard:
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                ClipboardRelayIcon()
+                    .frame(width: 14, height: 14)
                     .transition(.opacity.combined(with: .scale))
             case .stop:
                 RoundedRectangle(cornerRadius: 2)
