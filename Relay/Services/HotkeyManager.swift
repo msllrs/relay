@@ -41,6 +41,9 @@ final class HotkeyManager {
     nonisolated(unsafe) private var escLocalMonitor: Any?
     nonisolated(unsafe) private var globalKeyUpMonitor: Any?
     nonisolated(unsafe) private var localKeyUpMonitor: Any?
+    /// Prevents opening System Settings repeatedly when AXIsProcessTrusted() returns
+    /// false transiently (e.g. after a sleep/wake cycle).
+    private var didRedirectToAccessibilitySettings = false
     private(set) var currentShortcut: KeyboardShortcutModel
 
     init(appState: AppState) {
@@ -176,9 +179,7 @@ final class HotkeyManager {
     private func requestAccessibilityForGlobalMonitors() {
         let trusted = AXIsProcessTrusted()
         hotkeyLog.notice("AXIsProcessTrusted at launch: \(trusted)")
-        // No prompt here — the hotkey works without accessibility. If the user tries
-        // push-to-talk or escape cancel and accessibility is missing, the banner in
-        // Settings will guide them.
+        appState?.accessibilityNotGranted = !trusted
     }
 
     func startEscMonitor(onEsc: @escaping @MainActor () -> Void) {
@@ -245,12 +246,19 @@ final class HotkeyManager {
     /// Surfaces the broken state so the UI can warn the user.
     private func detectAccessibilityBrokenIfNeeded(globalMonitor: Any?) {
         if !AXIsProcessTrusted() {
+            appState?.accessibilityNotGranted = true
             // Not granted yet — open System Settings so user can grant it.
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                NSWorkspace.shared.open(url)
+            // Only do this once per app session to avoid a loop when the TCC cache
+            // is stale after a sleep/wake cycle.
+            if !didRedirectToAccessibilitySettings {
+                didRedirectToAccessibilitySettings = true
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                    NSWorkspace.shared.open(url)
+                }
             }
             return
         }
+        appState?.accessibilityNotGranted = false
         // Granted but monitor is nil — stale TCC entry after an update.
         let broken = globalMonitor == nil
         if broken != accessibilityBroken {
