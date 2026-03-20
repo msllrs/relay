@@ -5,6 +5,28 @@
         <item>
             <title>0.3.4</title>
             <pubDate>Fri, 20 Mar 2026 11:26:23 +0000</pubDate>
+            <sparkle:version>124</sparkle:version>
+            <sparkle:shortVersionString>0.3.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## New
+
+- Context-aware filler word removal — "like" and "right" are cleaned when used as fillers while preserved when meaningful (e.g. "I like this", "looks like a bug")
+- Pin popover — keep the popover open when clicking outside
+
+## Fixes
+
+- Filter empty voice notes from composed output
+- Fix accessibility dialog loop and add not-granted banner
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.4/Relay-v0.3.4.zip" length="5407172" type="application/octet-stream" sparkle:edSignature="I8RKLjcfIiB3NKnl6ko0QV9oITniManmf6Hh9WON2eicWXZrzd9RHAF5YTbHSRgimfEr96ScYV5V8aNClK+WDA=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.4/Relay124-122.delta" sparkle:deltaFrom="122" length="259598" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="YiC7Uq25cuKr948txaW8g3qKvTKm1iyIC7i1XeMbJcTEvPsr/Cjh74nAU0z4tz0OTRaSUq9y3anpTtFt8mshCA=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
+            <title>0.3.4</title>
+            <pubDate>Fri, 20 Mar 2026 11:26:34 +0000</pubDate>
             <sparkle:version>122</sparkle:version>
             <sparkle:shortVersionString>0.3.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
@@ -19,7 +41,7 @@
 - Filter empty voice notes from composed output
 - Fix accessibility dialog loop and add not-granted banner
 ]]></description>
-            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.4/Relay-v0.3.4.zip" length="5405723" type="application/octet-stream" sparkle:edSignature="0nOAavAXDYA3QgY04mm8uNJLtMOHcsxdhMc10gs8fsCiX3jXOQlpK65ZlG89co8tD7J7DdZZbEi54HeJcE7rBA=="/>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.3.4/Relay-v0.3.4.dmg" length="5698129" type="application/octet-stream" sparkle:edSignature="YSLuOMWq5UeKGa+CRU4QNVYBvOw+g77LOutYQvUOvlH2yHDXWLEvUQ/ANIAsXrGSOb5BeyZeeZd/I8Ltf5nABQ=="/>
         </item>
     </channel>
 </rss>
