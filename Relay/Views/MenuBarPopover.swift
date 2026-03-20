@@ -118,6 +118,13 @@ private struct MainPage: View {
 
                 Spacer()
 
+                PinButton(isPinned: $appState.pinPopover)
+                    .opacity(appState.pinPopover && !showSettings && !appState.isRecording ? 1 : 0)
+                    .scaleEffect(appState.pinPopover && !showSettings && !appState.isRecording ? 1 : 0.5)
+                    .blur(radius: appState.pinPopover && !showSettings && !appState.isRecording ? 0 : 3)
+                    .animation(.easeInOut(duration: 0.2), value: appState.pinPopover)
+                    .allowsHitTesting(appState.pinPopover && !showSettings && !appState.isRecording)
+
                 SettingsGearButton(showSettings: $showSettings, isRecording: appState.isRecording)
             }
             .padding(.horizontal, 16)
@@ -230,7 +237,38 @@ private struct MainPage: View {
                 }
             }
             return actions
+        }(), bareActions: {
+            var bare: [Int: () -> Void] = [:]
+            if appState.pinPopover {
+                bare[kVK_Escape] = {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+            }
+            return bare
         }()))
+    }
+}
+
+// MARK: - Pin Button
+
+/// Small pin icon shown next to the settings cog when popover is pinned.
+/// Tapping it unpins the popover.
+private struct PinButton: View {
+    @Binding var isPinned: Bool
+
+    var body: some View {
+        Button {
+            isPinned.toggle()
+        } label: {
+            Image(systemName: "pin.fill")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .offset(y: 1)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Unpin popover")
     }
 }
 
@@ -459,30 +497,40 @@ private struct CheckmarkStroke: Shape {
 
 /// Intercepts keyboard shortcuts while the popover is open.
 /// ⌘C (copy prompt), ⌘⌫ (clear stack), ⌘, (settings), ⌘Q (quit).
+/// Also handles bare key actions (no modifiers) like Esc to close a pinned popover.
 private struct PopoverKeyHandler: NSViewRepresentable {
     var actions: [Int: () -> Void]
+    var bareActions: [Int: () -> Void] = [:]
 
     func makeNSView(context: Context) -> KeyHandlerNSView {
         let view = KeyHandlerNSView()
         view.actions = actions
+        view.bareActions = bareActions
         return view
     }
 
     func updateNSView(_ nsView: KeyHandlerNSView, context: Context) {
         nsView.actions = actions
+        nsView.bareActions = bareActions
     }
 }
 
 private final class KeyHandlerNSView: NSView {
     var actions: [Int: () -> Void] = [:]
+    var bareActions: [Int: () -> Void] = [:]
     private nonisolated(unsafe) var monitor: Any?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil && monitor == nil {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, event.modifierFlags.contains(.command) else { return event }
-                if let action = self.actions[Int(event.keyCode)] {
+                guard let self else { return event }
+                if event.modifierFlags.contains(.command) {
+                    if let action = self.actions[Int(event.keyCode)] {
+                        MainActor.assumeIsolated { action() }
+                        return nil
+                    }
+                } else if let action = self.bareActions[Int(event.keyCode)] {
                     MainActor.assumeIsolated { action() }
                     return nil
                 }

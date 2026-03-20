@@ -32,6 +32,9 @@ final class AppState: ObservableObject {
     @Published var autoPasteAfterCopy: Bool {
         didSet { UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy") }
     }
+    @Published var pinPopover: Bool {
+        didSet { UserDefaults.standard.set(pinPopover, forKey: "pinPopover") }
+    }
     @Published var showRecordingOverlay: Bool {
         didSet { UserDefaults.standard.set(showRecordingOverlay, forKey: "showRecordingOverlay") }
     }
@@ -56,6 +59,7 @@ final class AppState: ObservableObject {
     /// True when accessibility permission appears granted in TCC but global NSEvent
     /// monitors are silently broken — happens after an app update invalidates the binary hash.
     @Published var accessibilityBroken = false
+    @Published var accessibilityNotGranted = false
     let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
     private var demoScenarioIndex = 0
     private static let demoScenarioCount = 2
@@ -107,6 +111,7 @@ final class AppState: ObservableObject {
                 || UserDefaults.standard.bool(forKey: "autoCopyComposedPrompt")
         }
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
+        self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
         if UserDefaults.standard.object(forKey: "showRecordingOverlay") == nil {
             self.showRecordingOverlay = true
         } else {
@@ -523,9 +528,9 @@ final class AppState: ObservableObject {
             copyPromptToClipboard()
         }
 
-        if autoCopy && autoPasteAfterCopy {
+        if autoCopy && autoPasteAfterCopy && AXIsProcessTrusted() {
             Task {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(300))
                 simulatePaste()
             }
         }
@@ -651,11 +656,14 @@ final class AppState: ObservableObject {
             stack.update(id: id, textContent: markedText)
         }
 
-        // If the only item is a voice note, just copy the raw text
-        let onlyVoiceNote = stack.items.count == 1
-            && stack.items[0].contentType == .voiceNote
-        let prompt = onlyVoiceNote
-            ? (stack.items[0].textContent ?? "")
+        // If the only meaningful items are voice notes (no context chips), just copy the raw text
+        let nonEmptyVoiceNotes = stack.items.filter {
+            $0.contentType == .voiceNote && !($0.textContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let hasNonVoiceItems = stack.items.contains { $0.contentType != .voiceNote }
+        let onlyVoiceNotes = !nonEmptyVoiceNotes.isEmpty && !hasNonVoiceItems
+        let prompt = onlyVoiceNotes
+            ? nonEmptyVoiceNotes.compactMap(\.textContent).joined(separator: " ")
             : PromptComposer.compose(items: stack.items, format: promptFormat, voiceNotePosition: voiceNotePosition)
         writeToClipboard(prompt)
 

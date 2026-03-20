@@ -59,13 +59,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
 
         popover.contentSize = NSSize(width: 360, height: 10) // height is dynamic
-        popover.behavior = .transient // closes on click-outside and Esc
+        popover.behavior = appState.pinPopover ? .applicationDefined : .transient
         popover.animates = false // instant show/close prevents isShown race on rapid clicks
         popover.delegate = self
         popover.contentViewController = MaxHeightHostingController(
             rootView: MenuBarPopover()
                 .environmentObject(appState)
         )
+
+        // Switch popover behavior when pin state changes
+        cancellables.append(appState.$pinPopover
+            .removeDuplicates()
+            .sink { [weak self] pinned in
+                self?.popover.behavior = pinned ? .applicationDefined : .transient
+            })
 
         // Update the icon when any AppState property changes.
         // objectWillChange fires before the value is set, so defer to next run loop.
