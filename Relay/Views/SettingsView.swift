@@ -41,6 +41,11 @@ struct SettingsPage: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
+        .onChange(of: showSettings) {
+            if showSettings {
+                appState.refreshAccessibilityStatus()
+            }
+        }
     }
 
     // MARK: - Sections

@@ -60,6 +60,13 @@ final class AppState: ObservableObject {
     /// monitors are silently broken — happens after an app update invalidates the binary hash.
     @Published var accessibilityBroken = false
     @Published var accessibilityNotGranted = false
+
+    /// Re-check AXIsProcessTrusted() and update the published flag.
+    /// Call this when the settings view appears so the banner clears
+    /// promptly after the user grants permission.
+    func refreshAccessibilityStatus() {
+        accessibilityNotGranted = !AXIsProcessTrusted()
+    }
     let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
     private var demoScenarioIndex = 0
     private static let demoScenarioCount = 2
