@@ -3,12 +3,17 @@ set -euo pipefail
 
 # Parse flags
 CONFIG="debug"
+NOTARIZE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --release) CONFIG="release"; shift ;;
+        --notarize) NOTARIZE=true; CONFIG="release"; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
+
+SIGNING_IDENTITY="Developer ID Application: LFSGD LTD (TKGBUP8TGN)"
+NOTARIZE_PROFILE="relay-notarize"
 
 # Version info
 VERSION=$(cat VERSION)
@@ -89,7 +94,56 @@ ENT
 # Ensure @rpath resolves to the embedded Frameworks directory
 install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/MacOS/Relay" 2>/dev/null || true
 
-codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
+APP_BUNDLE=".build/Relay.app"
 
-echo "Built .build/Relay.app (v${VERSION}, build ${BUILD_NUMBER}, ${CONFIG})"
-echo "Run with: open .build/Relay.app"
+if $NOTARIZE; then
+    echo "Signing with Developer ID..."
+
+    # Sign Sparkle framework first (inside-out signing)
+    if [ -d "$APP_DIR/Frameworks/Sparkle.framework" ]; then
+        SPARKLE_DIR="$APP_DIR/Frameworks/Sparkle.framework/Versions/B"
+        codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+            "$SPARKLE_DIR/XPCServices/Installer.xpc"
+        codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+            "$SPARKLE_DIR/XPCServices/Downloader.xpc"
+        codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+            "$SPARKLE_DIR/Autoupdate"
+        codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+            "$SPARKLE_DIR/Updater.app"
+        codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+            "$APP_DIR/Frameworks/Sparkle.framework"
+        echo "Signed Sparkle.framework"
+    fi
+
+    # Sign the main binary with hardened runtime + timestamp (required for notarization)
+    codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+        --entitlements /tmp/relay-entitlements.plist \
+        "$APP_BUNDLE"
+
+    echo "Verifying signature..."
+    codesign --verify --deep --strict "$APP_BUNDLE"
+
+    # Create ZIP for notarization
+    NOTARIZE_ZIP=".build/Relay-notarize.zip"
+    ditto -c -k --keepParent "$APP_BUNDLE" "$NOTARIZE_ZIP"
+
+    echo "Submitting to Apple for notarization..."
+    xcrun notarytool submit "$NOTARIZE_ZIP" \
+        --keychain-profile "$NOTARIZE_PROFILE" \
+        --wait
+
+    echo "Stapling notarization ticket..."
+    xcrun stapler staple "$APP_BUNDLE"
+
+    echo "Verifying notarization..."
+    spctl --assess --type execute --verbose "$APP_BUNDLE"
+
+    rm "$NOTARIZE_ZIP"
+    echo "Notarization complete!"
+else
+    # Ad-hoc signing for local development
+    codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
+fi
+
+echo "Built $APP_BUNDLE (v${VERSION}, build ${BUILD_NUMBER}, ${CONFIG})"
+echo "Run with: open $APP_BUNDLE"
