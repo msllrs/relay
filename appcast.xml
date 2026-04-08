@@ -3,6 +3,24 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.4.0</title>
+            <pubDate>Wed, 08 Apr 2026 15:53:10 +0000</pubDate>
+            <sparkle:version>126</sparkle:version>
+            <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## New
+
+- Notarized with Apple Developer ID — no more Gatekeeper warnings
+- Custom clipboard overlay icon
+
+## Fixes
+
+- Accessibility status refreshes when opening settings
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.4.0/Relay-v0.4.0.zip" length="5456325" type="application/octet-stream" sparkle:edSignature="SUvhIMlOQjPjIeMV4jd/d0XDtJMlMPkMOaGuXCwn2Pb5aUtzGEa7Czyly4gPgURowdyoSKTYTHizQkWuG31RDQ=="/>
+        </item>
+        <item>
             <title>0.3.4</title>
             <pubDate>Fri, 20 Mar 2026 11:26:23 +0000</pubDate>
             <sparkle:version>124</sparkle:version>
