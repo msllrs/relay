@@ -140,6 +140,46 @@ if $NOTARIZE; then
 
     rm "$NOTARIZE_ZIP"
     echo "Notarization complete!"
+
+    # Create release artifacts
+    RELEASE_ZIP=".build/Relay-v${VERSION}.zip"
+    RELEASE_DMG=".build/Relay-v${VERSION}.dmg"
+    ditto -c -k --keepParent "$APP_BUNDLE" "$RELEASE_ZIP"
+
+    rm -f "$RELEASE_DMG"
+
+    # Stage DMG contents: app + Applications alias with custom icon
+    DMG_STAGING=".build/dmg-staging"
+    rm -rf "$DMG_STAGING"
+    mkdir -p "$DMG_STAGING"
+    cp -R "$APP_BUNDLE" "$DMG_STAGING/"
+
+    # Create Finder alias to /Applications and set custom folder icon
+    osascript -e '
+    tell application "Finder"
+        set theAlias to make alias file to POSIX file "/Applications" at POSIX file "'"$(pwd)/$DMG_STAGING"'"
+        set name of theAlias to "Applications"
+    end tell'
+    fileicon set "$DMG_STAGING/Applications" Resources/dmg-applications.png
+
+    create-dmg \
+        --volname "Relay" \
+        --volicon "Relay/Resources/AppIcon.icns" \
+        --background "Resources/dmg-bg@2x.png" \
+        --window-pos 200 120 \
+        --window-size 480 270 \
+        --icon-size 80 \
+        --icon "Relay.app" 140 110 \
+        --hide-extension "Relay.app" \
+        --icon "Applications" 340 110 \
+        --no-internet-enable \
+        "$RELEASE_DMG" "$DMG_STAGING"
+
+    rm -rf "$DMG_STAGING"
+
+    echo "Release artifacts:"
+    echo "  $RELEASE_ZIP"
+    echo "  $RELEASE_DMG"
 else
     # Ad-hoc signing for local development
     codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
