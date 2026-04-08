@@ -23,7 +23,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 
 ## Install
 
-Download the latest DMG from [Releases](https://github.com/msllrs/relay/releases) and drag to Applications. The app is signed and notarized with Apple Developer ID — it will open without any Gatekeeper warnings.
+Download the latest DMG from [Releases](https://github.com/msllrs/relay/releases) and drag to Applications.
 
 ## Build from source
 
