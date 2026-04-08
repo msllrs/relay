@@ -23,7 +23,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 
 ## Install
 
-Download the latest DMG from [Releases](https://github.com/msllrs/relay/releases) and drag to Applications. On first launch, macOS will block the app — go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
+Download the latest DMG from [Releases](https://github.com/msllrs/relay/releases) and drag to Applications. The app is signed and notarized with Apple Developer ID — it will open without any Gatekeeper warnings.
 
 ## Build from source
 
@@ -36,7 +36,7 @@ cd relay
 open .build/Relay.app
 ```
 
-Use `./build-app.sh --release` for an optimized build. Use `./make-dmg.sh` to create a distributable DMG.
+Use `./build-app.sh --release` for an optimized build. Use `./build-app.sh --notarize` to create a signed, notarized release with DMG.
 
 ## Troubleshooting
 
