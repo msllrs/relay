@@ -329,7 +329,6 @@ final class AppState: ObservableObject {
 
     /// Called by HotkeyManager when the keyboard shortcut is pressed.
     func hotkeyTriggered() {
-
         if isMonitoring && voiceManager.isRecording {
             // Already recording → stop, save transcription, stop monitoring
             finishDictationAndStop()
@@ -550,9 +549,13 @@ final class AppState: ObservableObject {
         }
 
         if autoCopy && autoPasteAfterCopy && AXIsProcessTrusted() {
-            Task {
-                try? await Task.sleep(for: .milliseconds(300))
-                simulatePaste()
+            // Deactivate Relay so focus returns to the previous app before pasting
+            NSApp.deactivate()
+            Task { [weak self] in
+                // Wait for focus to return to the previous app
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                self?.simulatePaste()
             }
         }
     }
@@ -694,11 +697,11 @@ final class AppState: ObservableObject {
             // Delay the clear so the Copied banner can fully appear before content collapses.
             // This prevents the banner, divider, and transcription from overlapping mid-animation.
             clearAfterCopyTask?.cancel()
-            clearAfterCopyTask = Task {
+            clearAfterCopyTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(400))
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, let self else { return }
                 withAnimation(.easeInOut(duration: 0.25)) {
-                    clearAll()
+                    self.clearAll()
                 }
             }
         }
