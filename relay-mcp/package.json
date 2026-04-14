@@ -1,0 +1,21 @@
+{
+  "name": "relay-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Relay — exposes context stack and composed prompts to Claude Code",
+  "type": "module",
+  "bin": {
+    "relay-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

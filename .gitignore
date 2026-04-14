@@ -7,3 +7,5 @@ DerivedData/
 Relay.app/
 *.cer
 *.dmg
+relay-mcp/node_modules/
+relay-mcp/dist/

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "relay": {
+      "command": "node",
+      "args": ["relay-mcp/dist/index.js"]
+    }
+  }
+}
