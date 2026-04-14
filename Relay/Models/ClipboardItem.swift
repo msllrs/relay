@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 
-struct ClipboardItem: Identifiable, Equatable {
+struct ClipboardItem: Identifiable, Equatable, Codable {
     let id: UUID
     let contentType: ContentType
     var textContent: String?
@@ -20,6 +20,10 @@ struct ClipboardItem: Identifiable, Equatable {
         self.textContent = textContent
         self.imagePath = imagePath
         self.timestamp = timestamp
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, contentType, textContent, imagePath, timestamp
     }
 
     /// Short preview string for display in the list
