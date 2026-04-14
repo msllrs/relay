@@ -104,7 +104,11 @@ private struct MainPage: View {
             HStack {
                 Text("Relay")
                     .font(.system(size: 14, weight: .semibold))
+                    #if DEBUG
+                    .foregroundStyle(.blue)
+                    #else
                     .foregroundStyle(.primary)
+                    #endif
                     .scaleEffect(showSettings || appState.isRecording ? 0.85 : 1, anchor: .leading)
                     .blur(radius: showSettings || appState.isRecording ? 3 : 0)
                     .opacity(showSettings || appState.isRecording ? 0 : 1)
