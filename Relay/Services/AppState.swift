@@ -53,6 +53,17 @@ final class AppState: ObservableObject {
             voiceManager.inputDeviceID = selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
         }
     }
+    @Published var mcpBridgeEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(mcpBridgeEnabled, forKey: "mcpBridgeEnabled")
+            if mcpBridgeEnabled {
+                mcpBridgeWriter?.start()
+            } else {
+                mcpBridgeWriter?.stop()
+            }
+        }
+    }
+    private var mcpBridgeWriter: MCPBridgeWriter?
     @Published var itemJustAdded = false
     @Published var isRecording = false
     @Published var displayTranscription = ""
@@ -132,6 +143,7 @@ final class AppState: ObservableObject {
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
+        self.mcpBridgeEnabled = UserDefaults.standard.bool(forKey: "mcpBridgeEnabled")
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -144,6 +156,8 @@ final class AppState: ObservableObject {
         }
         clipboardMonitor = ClipboardMonitor(appState: self)
         hotkeyManager = HotkeyManager(appState: self)
+        mcpBridgeWriter = MCPBridgeWriter(appState: self)
+        if mcpBridgeEnabled { mcpBridgeWriter?.start() }
 
         // Forward stack changes so SwiftUI picks them up
         stack.objectWillChange

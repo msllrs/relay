@@ -35,6 +35,7 @@ struct SettingsPage: View {
                 behaviorSection
                 afterDictationSection
                 promptSection
+                integrationSection
                 shortcutSection
                 footerSection
             }
@@ -136,6 +137,12 @@ struct SettingsPage: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+        }
+    }
+
+    private var integrationSection: some View {
+        SettingsSection("Integration") {
+            SettingsToggle("MCP bridge for Claude Code", isOn: $appState.mcpBridgeEnabled)
         }
     }
 
