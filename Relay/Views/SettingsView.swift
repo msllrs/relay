@@ -36,6 +36,7 @@ struct SettingsPage: View {
                 afterDictationSection
                 promptSection
                 integrationSection
+                annotationSection
                 shortcutSection
                 footerSection
             }
@@ -143,6 +144,33 @@ struct SettingsPage: View {
     private var integrationSection: some View {
         SettingsSection("Integration") {
             SettingsToggle("MCP bridge for Claude Code", isOn: $appState.mcpBridgeEnabled)
+        }
+    }
+
+    private var annotationSection: some View {
+        SettingsSection("Annotation") {
+            SettingsToggle("Draw-on-screen annotation", isOn: $appState.annotationEnabled)
+
+            if appState.annotationEnabled {
+                SettingsToggle("Annotate while recording", isOn: $appState.annotateWhileRecording)
+
+                SettingsRow("Annotation shortcut") {
+                    ShortcutRecorderButton(
+                        initial: KeyboardShortcutModel.load(
+                            key: KeyboardShortcutModel.annotateDefaultsKey,
+                            fallback: .annotateDefault
+                        ),
+                        defaultShortcut: .annotateDefault,
+                        onUpdate: { state, shortcut in
+                            state.hotkeyManager?.updateAnnotateShortcut(shortcut)
+                        }
+                    )
+                }
+
+                if appState.needsScreenRecordingPermission {
+                    ScreenRecordingNotGrantedBanner()
+                }
+            }
         }
     }
 
@@ -269,26 +297,45 @@ private struct SettingsToggle: View {
 private struct ShortcutRecorderButton: View {
     @EnvironmentObject var appState: AppState
     @State private var isRecording = false
-    @State private var currentShortcut = KeyboardShortcutModel.load()
+    @State private var currentShortcut: KeyboardShortcutModel
 
-    private var isDefault: Bool { currentShortcut == .default }
+    private let defaultShortcut: KeyboardShortcutModel
+    private let onUpdate: (AppState, KeyboardShortcutModel) -> Void
+
+    /// Defaults to the dictation shortcut for backwards compatibility.
+    init(
+        initial: KeyboardShortcutModel = KeyboardShortcutModel.load(),
+        defaultShortcut: KeyboardShortcutModel = .default,
+        onUpdate: @escaping (AppState, KeyboardShortcutModel) -> Void = { state, shortcut in
+            state.hotkeyManager?.updateShortcut(shortcut)
+        }
+    ) {
+        self._currentShortcut = State(initialValue: initial)
+        self.defaultShortcut = defaultShortcut
+        self.onUpdate = onUpdate
+    }
+
+    private var isDefault: Bool { currentShortcut == defaultShortcut }
+
+    private func apply(_ shortcut: KeyboardShortcutModel) {
+        appState.hotkeyManager?.suspendMonitors()
+        onUpdate(appState, shortcut)
+        appState.hotkeyManager?.resumeMonitors()
+        currentShortcut = shortcut
+    }
 
     var body: some View {
         HStack(spacing: 4) {
             if !isDefault {
                 Button {
-                    let shortcut = KeyboardShortcutModel.default
-                    appState.hotkeyManager?.suspendMonitors()
-                    appState.hotkeyManager?.updateShortcut(shortcut)
-                    appState.hotkeyManager?.resumeMonitors()
-                    currentShortcut = shortcut
+                    apply(defaultShortcut)
                 } label: {
                     Image(systemName: "arrow.counterclockwise")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Reset to default (\(KeyboardShortcutModel.default.displayString))")
+                .help("Reset to default (\(defaultShortcut.displayString))")
                 .transition(.scale.combined(with: .opacity))
             }
 
@@ -303,7 +350,7 @@ private struct ShortcutRecorderButton: View {
         .background {
             if isRecording {
                 ShortcutCaptureView { shortcut in
-                    appState.hotkeyManager?.updateShortcut(shortcut)
+                    onUpdate(appState, shortcut)
                     currentShortcut = shortcut
                     isRecording = false
                     appState.hotkeyManager?.resumeMonitors()
@@ -376,6 +423,45 @@ private struct AccessibilityNotGrantedBanner: View {
 
                 Button("Open Accessibility Settings") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .font(.system(size: 11))
+                .controlSize(.small)
+                .padding(.top, 1)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.orange.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Screen Recording Not Granted Banner
+
+private struct ScreenRecordingNotGrantedBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Screen Recording not enabled")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                Text("Enable Relay in Screen Recording settings so annotations can capture the region you draw on. You may need to relaunch Relay after granting.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Open Screen Recording Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
                         NSWorkspace.shared.open(url)
                     }
                 }
