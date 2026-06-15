@@ -553,7 +553,7 @@ final class AppState: ObservableObject {
 
         addItem(ClipboardItem(
             contentType: .annotation,
-            textContent: "User circled this region — focus here / this is the relevant element.",
+            textContent: AnnotationShape.circle.intentLabel,
             imagePath: url.path
         ))
     }
