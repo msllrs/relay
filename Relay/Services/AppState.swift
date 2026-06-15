@@ -557,6 +557,39 @@ final class AppState: ObservableObject {
             imagePath: url.path
         ))
     }
+
+    /// Phase-1 debug hook: capture the real main screen and crop a fixed
+    /// centered rect, exercising ScreenCaptureKit + the crop/save + coordinate
+    /// math. Triggers the TCC prompt on first use.
+    func debugCaptureScreenAnnotation() {
+        let service = ScreenCaptureService()
+        guard service.requestPermission() else {
+            debugAddTestAnnotation() // fall back so the rest of the path is still testable
+            return
+        }
+        guard let screen = NSScreen.main else { return }
+        // A 400x300pt rect centered on screen, expressed in panel/screen-local points.
+        let w: CGFloat = 400, h: CGFloat = 300
+        let rectInPanel = CGRect(
+            x: (screen.frame.width - w) / 2,
+            y: (screen.frame.height - h) / 2,
+            width: w, height: h
+        )
+        let pixelRect = ScreenCaptureService.toPixelRect(rectInPanel, screen: screen)
+        Task {
+            do {
+                let full = try await service.captureFullScreen(of: screen)
+                guard let path = service.cropAndSave(full, pixelRect: pixelRect) else { return }
+                addItem(ClipboardItem(
+                    contentType: .annotation,
+                    textContent: AnnotationShape.circle.intentLabel,
+                    imagePath: path
+                ))
+            } catch {
+                NSLog("debugCaptureScreenAnnotation failed: \(error)")
+            }
+        }
+    }
 #endif
 
     func notifyItemAdded() {

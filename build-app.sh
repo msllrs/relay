@@ -69,6 +69,8 @@ cat > "$APP_DIR/Info.plist" << PLIST
 	<string>Relay uses on-device speech recognition to transcribe voice notes. No audio data is sent to Apple.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Relay uses the microphone to record voice notes for transcription.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Relay captures a small region of your screen when you draw an annotation, to send visual context to Claude Code.</string>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/msllrs/relay/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>

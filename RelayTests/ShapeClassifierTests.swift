@@ -85,4 +85,25 @@ final class ShapeClassifierTests: XCTestCase {
         let b = [CGPoint(x: 20, y: 5), CGPoint(x: 30, y: 40)]
         XCTAssertEqual(ShapeClassifier.unionBoundingBox([a, b]), CGRect(x: 0, y: 0, width: 30, height: 40))
     }
+
+    // MARK: - Coordinate conversion (Y-flip + Retina scale)
+
+    func testToPixelRectFlipsYNearTopOfScreen() {
+        // High AppKit Y (near visual top) → small CGImage Y (near top-left origin).
+        let rect = CGRect(x: 100, y: 800, width: 200, height: 100)
+        XCTAssertEqual(ScreenCaptureService.toPixelRect(rect, screenHeight: 1000, scale: 2),
+                       CGRect(x: 200, y: 200, width: 400, height: 200))
+    }
+
+    func testToPixelRectFlipsYNearBottomOfScreen() {
+        let rect = CGRect(x: 100, y: 50, width: 200, height: 100)
+        XCTAssertEqual(ScreenCaptureService.toPixelRect(rect, screenHeight: 1000, scale: 2),
+                       CGRect(x: 200, y: 1700, width: 400, height: 200))
+    }
+
+    func testToPixelRectNonRetina() {
+        let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
+        XCTAssertEqual(ScreenCaptureService.toPixelRect(rect, screenHeight: 1000, scale: 1),
+                       CGRect(x: 0, y: 900, width: 100, height: 100))
+    }
 }

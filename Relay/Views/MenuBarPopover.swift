@@ -121,7 +121,7 @@ private struct MainPage: View {
                             appState.populateDemoStack()
                             return
                         }
-                        appState.debugAddTestAnnotation()
+                        appState.debugCaptureScreenAnnotation()
                         #else
                         guard appState.isDemo else { return }
                         appState.clearAll()
