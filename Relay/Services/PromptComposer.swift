@@ -108,6 +108,11 @@ enum PromptComposer {
             return "```\n\(raw)\n```"
         case .image:
             return "![image](\(raw.replacingOccurrences(of: "[image: ", with: "").replacingOccurrences(of: "]", with: "")))"
+        case .annotation:
+            let note = item.textContent ?? ""
+            guard let path = item.imagePath else { return note }
+            let image = "![annotation](\(path))"
+            return note.isEmpty ? image : "\(note)\n\n\(image)"
         case .file, .folder:
             return "`\(raw)`"
         case .url:
@@ -122,6 +127,16 @@ enum PromptComposer {
     // MARK: - Shared
 
     private static func contentString(for item: ClipboardItem) -> String {
+        // Annotations carry BOTH an intent label and a cropped image. Emit both —
+        // the plain text-first path below would otherwise hide the image.
+        if item.contentType == .annotation {
+            let note = item.textContent ?? ""
+            if let path = item.imagePath {
+                return note.isEmpty ? "[image: \(path)]" : "\(note)\n[image: \(path)]"
+            }
+            return note
+        }
+
         if let text = item.textContent {
             return text
         }

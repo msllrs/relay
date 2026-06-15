@@ -16,6 +16,7 @@ extension ContentType {
         case .file: Self.chipColors.file
         case .folder: Self.chipColors.file
         case .voiceNote: Self.chipColors.voiceNote
+        case .annotation: Self.chipColors.annotation
         }
     }
 
@@ -31,6 +32,7 @@ extension ContentType {
         let image: Color
         let file: Color
         let voiceNote: Color
+        let annotation: Color
     }
 
     private static let chipColors = ChipColors(
@@ -44,7 +46,8 @@ extension ContentType {
         text: adaptive(light: (0.35, 0.35, 0.35), dark: (0.68, 0.68, 0.68)),
         image: adaptive(light: (0.52, 0.22, 0.82), dark: (0.659, 0.349, 0.996)),
         file: adaptive(light: (0.78, 0.52, 0), dark: (0.976, 0.667, 0)),
-        voiceNote: adaptive(light: (0.85, 0.22, 0.52), dark: (1, 0.365, 0.682))
+        voiceNote: adaptive(light: (0.85, 0.22, 0.52), dark: (1, 0.365, 0.682)),
+        annotation: adaptive(light: (0.90, 0.45, 0.10), dark: (1, 0.6, 0.25))
     )
 
     private static func adaptive(light: (CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat)) -> Color {

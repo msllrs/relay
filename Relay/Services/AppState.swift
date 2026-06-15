@@ -526,6 +526,39 @@ final class AppState: ObservableObject {
         notifyItemAdded()
     }
 
+#if DEBUG
+    /// Phase-0 debug hook: fabricate an annotation item from a generated test PNG
+    /// to verify the annotation flows through the stack, prompt, and MCP bridge
+    /// without any capture/overlay code.
+    func debugAddTestAnnotation() {
+        let size = NSSize(width: 200, height: 120)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.systemOrange.setFill()
+        NSBezierPath(rect: NSRect(origin: .zero, size: size)).fill()
+        NSColor.white.set()
+        let path = NSBezierPath(ovalIn: NSRect(x: 20, y: 20, width: 160, height: 80))
+        path.lineWidth = 6
+        path.stroke()
+        image.unlockFocus()
+
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("relay-images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(UUID().uuidString + ".png")
+        guard (try? png.write(to: url)) != nil else { return }
+
+        addItem(ClipboardItem(
+            contentType: .annotation,
+            textContent: "User circled this region — focus here / this is the relevant element.",
+            imagePath: url.path
+        ))
+    }
+#endif
+
     func notifyItemAdded() {
         itemJustAdded = true
         Task {

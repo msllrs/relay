@@ -14,6 +14,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
     case file
     case folder
     case voiceNote
+    case annotation
 
     var id: String { rawValue }
 
@@ -32,6 +33,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .file: "File"
         case .folder: "Folder"
         case .voiceNote: "Voice Note"
+        case .annotation: "Annotation"
         }
     }
 
@@ -50,6 +52,7 @@ enum ContentType: String, CaseIterable, Identifiable, Codable {
         case .file: "doc"
         case .folder: "doc"
         case .voiceNote: "mic.fill"
+        case .annotation: "scribble.variable"
         }
     }
 

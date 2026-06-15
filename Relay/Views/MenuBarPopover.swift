@@ -115,9 +115,18 @@ private struct MainPage: View {
                     .offset(y: 1)
                     .animation(.easeInOut(duration: 0.25), value: showSettings)
                     .onTapGesture {
+                        #if DEBUG
+                        guard !appState.isDemo else {
+                            appState.clearAll()
+                            appState.populateDemoStack()
+                            return
+                        }
+                        appState.debugAddTestAnnotation()
+                        #else
                         guard appState.isDemo else { return }
                         appState.clearAll()
                         appState.populateDemoStack()
+                        #endif
                     }
 
                 Spacer()
