@@ -1,7 +1,8 @@
 import AppKit
 
-/// Manages the full-screen drawing overlay panel(s). Phase 3 ships a single
-/// modal panel on the active screen that captures all drawing directly.
+/// Manages the full-screen drawing overlay panel. v1 shows a single panel on
+/// the active screen. In `.modal` mode it is key and captures all drawing; in
+/// `.armed` mode it is click-through until drawing is enabled (Option held).
 @MainActor
 final class AnnotationOverlayController {
     private weak var manager: AnnotationManager?
@@ -11,10 +12,10 @@ final class AnnotationOverlayController {
         self.manager = manager
     }
 
-    func show() {
+    func show(clickThrough: Bool) {
         guard let manager, let screen = NSScreen.main else { return }
         let panel = AnnotationPanel(screen: screen, manager: manager)
-        panel.present()
+        panel.present(clickThrough: clickThrough)
         self.panel = panel
     }
 
@@ -22,13 +23,23 @@ final class AnnotationOverlayController {
         panel?.dismiss()
         panel = nil
     }
+
+    /// Toggle pass-through. When click-through, pointer events reach apps below;
+    /// otherwise the panel captures drawing.
+    func setClickThrough(_ clickThrough: Bool) {
+        panel?.setClickThrough(clickThrough)
+    }
+
+    func clearStrokes() {
+        panel?.clearStrokes()
+    }
 }
 
-/// A borderless, transparent panel spanning one screen. In the modal Phase-3
-/// flow it becomes key and its content view captures drawing directly.
+/// A borderless, transparent panel spanning one screen.
 final class AnnotationPanel: NSPanel {
     private let screenForPanel: NSScreen
     private weak var manager: AnnotationManager?
+    private var drawingView: AnnotationDrawingView?
 
     init(screen: NSScreen, manager: AnnotationManager) {
         self.screenForPanel = screen
@@ -46,24 +57,40 @@ final class AnnotationPanel: NSPanel {
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isMovable = false
-        ignoresMouseEvents = false // modal: capture all drawing
 
         let view = AnnotationDrawingView(screen: screen, manager: manager)
         view.frame = NSRect(origin: .zero, size: screen.frame.size)
         view.autoresizingMask = [.width, .height]
         contentView = view
+        drawingView = view
     }
 
     override var canBecomeKey: Bool { true }
 
-    func present() {
+    func present(clickThrough: Bool) {
         setFrame(screenForPanel.frame, display: true)
-        makeKeyAndOrderFront(nil)
-        orderFrontRegardless()
+        setClickThrough(clickThrough)
+        if clickThrough {
+            orderFrontRegardless()
+        } else {
+            makeKeyAndOrderFront(nil)
+            orderFrontRegardless()
+        }
     }
 
     func dismiss() {
         orderOut(nil)
+    }
+
+    func setClickThrough(_ clickThrough: Bool) {
+        ignoresMouseEvents = clickThrough
+        if !clickThrough {
+            makeKeyAndOrderFront(nil)
+        }
+    }
+
+    func clearStrokes() {
+        drawingView?.clearStrokes()
     }
 
     /// Esc cancels the session.
@@ -106,6 +133,12 @@ final class AnnotationDrawingView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false } // bottom-left origin, matches screen coords
+
+    func clearStrokes() {
+        completedStrokes = []
+        currentStroke = []
+        needsDisplay = true
+    }
 
     // MARK: - Drawing input
 

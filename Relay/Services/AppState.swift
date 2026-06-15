@@ -208,6 +208,21 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Arm/disarm the click-through annotation overlay around recording.
+        voiceManager.$isRecording
+            .dropFirst()
+            .sink { [weak self] recording in
+                guard let self else { return }
+                if recording {
+                    if self.annotationEnabled && self.annotateWhileRecording {
+                        self.annotationManager?.armForRecording()
+                    }
+                } else {
+                    self.annotationManager?.disarmForRecording()
+                }
+            }
+            .store(in: &cancellables)
+
         if ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1" {
             populateDemoStack()
             startMonitoring()
