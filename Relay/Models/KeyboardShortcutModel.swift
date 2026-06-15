@@ -13,6 +13,12 @@ struct KeyboardShortcutModel: Codable, Equatable, Sendable {
         modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue
     )
 
+    /// Default annotation shortcut: Cmd+Shift+A
+    static let annotateDefault = KeyboardShortcutModel(
+        keyCode: 0, // 'A'
+        modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue
+    )
+
     var modifierFlags: NSEvent.ModifierFlags {
         NSEvent.ModifierFlags(rawValue: modifiers).intersection(.deviceIndependentFlagsMask)
     }
@@ -124,18 +130,29 @@ struct KeyboardShortcutModel: Codable, Equatable, Sendable {
     // MARK: - Persistence
 
     private static let defaultsKey = "customKeyboardShortcut"
+    static let annotateDefaultsKey = "annotateKeyboardShortcut"
 
     static func load() -> KeyboardShortcutModel {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        load(key: defaultsKey, fallback: .default)
+    }
+
+    func save() {
+        save(key: Self.defaultsKey)
+    }
+
+    /// Load a shortcut from an arbitrary UserDefaults key, falling back when absent.
+    static func load(key: String, fallback: KeyboardShortcutModel) -> KeyboardShortcutModel {
+        guard let data = UserDefaults.standard.data(forKey: key),
               let model = try? JSONDecoder().decode(KeyboardShortcutModel.self, from: data) else {
-            return .default
+            return fallback
         }
         return model
     }
 
-    func save() {
+    /// Save this shortcut to an arbitrary UserDefaults key.
+    func save(key: String) {
         if let data = try? JSONEncoder().encode(self) {
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+            UserDefaults.standard.set(data, forKey: key)
         }
     }
 }

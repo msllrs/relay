@@ -5,8 +5,9 @@ import os.log
 
 private let hotkeyLog = Logger(subsystem: "com.msllrs.relay", category: "HotkeyManager")
 
-/// Unique ID for the registered Carbon hotkey.
+/// Unique IDs for the registered Carbon hotkeys.
 private let kHotkeyID = EventHotKeyID(signature: fourCharCode("RLAY"), id: 1)
+private let kAnnotateHotkeyID = EventHotKeyID(signature: fourCharCode("RLAY"), id: 2)
 
 private func fourCharCode(_ string: String) -> OSType {
     var result: OSType = 0
@@ -35,6 +36,8 @@ final class HotkeyManager {
     private(set) var accessibilityBroken = false
 
     nonisolated(unsafe) private var hotKeyRef: EventHotKeyRef?
+    nonisolated(unsafe) private var annotateHotKeyRef: EventHotKeyRef?
+    nonisolated(unsafe) private var annotateLocalMonitor: Any?
     nonisolated(unsafe) private var eventHandlerRef: EventHandlerRef?
     nonisolated(unsafe) private var localMonitor: Any?
     nonisolated(unsafe) private var escGlobalMonitor: Any?
@@ -45,13 +48,20 @@ final class HotkeyManager {
     /// false transiently (e.g. after a sleep/wake cycle).
     private var didRedirectToAccessibilitySettings = false
     private(set) var currentShortcut: KeyboardShortcutModel
+    private(set) var currentAnnotateShortcut: KeyboardShortcutModel
 
     init(appState: AppState) {
         self.appState = appState
         self.currentShortcut = KeyboardShortcutModel.load()
+        self.currentAnnotateShortcut = KeyboardShortcutModel.load(
+            key: KeyboardShortcutModel.annotateDefaultsKey,
+            fallback: .annotateDefault
+        )
         installCarbonHandler()
         registerCarbonHotKey()
+        registerAnnotateHotKey()
         installLocalMonitor()
+        installAnnotateLocalMonitor()
         requestAccessibilityForGlobalMonitors()
     }
 
@@ -72,13 +82,17 @@ final class HotkeyManager {
     func suspendMonitors() {
         isSuspended = true
         unregisterCarbonHotKey()
+        unregisterAnnotateHotKey()
         removeLocalMonitor()
+        removeAnnotateLocalMonitor()
     }
 
     func resumeMonitors() {
         isSuspended = false
         registerCarbonHotKey()
+        registerAnnotateHotKey()
         installLocalMonitor()
+        installAnnotateLocalMonitor()
     }
 
     // MARK: - Carbon Hot Key
@@ -106,8 +120,13 @@ final class HotkeyManager {
                     &hotkeyID
                 )
                 let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+                let id = hotkeyID.id
                 MainActor.assumeIsolated {
-                    manager.appState?.hotkeyTriggered()
+                    if id == kAnnotateHotkeyID.id {
+                        manager.appState?.annotateHotkeyTriggered()
+                    } else {
+                        manager.appState?.hotkeyTriggered()
+                    }
                 }
                 return noErr
             },
@@ -143,6 +162,63 @@ final class HotkeyManager {
     private func unregisterCarbonHotKey() {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         hotKeyRef = nil
+    }
+
+    /// Registers the standalone annotation Carbon hotkey. Does not require accessibility.
+    private func registerAnnotateHotKey() {
+        unregisterAnnotateHotKey()
+        let carbonMods = carbonModifiers(from: currentAnnotateShortcut.modifierFlags)
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(currentAnnotateShortcut.keyCode),
+            carbonMods,
+            kAnnotateHotkeyID,
+            GetApplicationEventTarget(),
+            0,
+            &ref
+        )
+        if status == noErr {
+            annotateHotKeyRef = ref
+            hotkeyLog.notice("RegisterEventHotKey (annotate) succeeded for keyCode=\(self.currentAnnotateShortcut.keyCode)")
+        } else {
+            hotkeyLog.error("RegisterEventHotKey (annotate) failed: \(status)")
+        }
+    }
+
+    private func unregisterAnnotateHotKey() {
+        if let annotateHotKeyRef { UnregisterEventHotKey(annotateHotKeyRef) }
+        annotateHotKeyRef = nil
+    }
+
+    func updateAnnotateShortcut(_ shortcut: KeyboardShortcutModel) {
+        currentAnnotateShortcut = shortcut
+        shortcut.save(key: KeyboardShortcutModel.annotateDefaultsKey)
+        if !isSuspended {
+            registerAnnotateHotKey()
+            installAnnotateLocalMonitor()
+        }
+    }
+
+    private func installAnnotateLocalMonitor() {
+        removeAnnotateLocalMonitor()
+        let keyCode = currentAnnotateShortcut.keyCode
+        let modifierFlags = currentAnnotateShortcut.modifierFlags
+        annotateLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if !event.isARepeat,
+               event.keyCode == keyCode,
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifierFlags {
+                MainActor.assumeIsolated {
+                    self?.appState?.annotateHotkeyTriggered()
+                }
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func removeAnnotateLocalMonitor() {
+        if let annotateLocalMonitor { NSEvent.removeMonitor(annotateLocalMonitor) }
+        annotateLocalMonitor = nil
     }
 
     /// Installs the local NSEvent monitor so the shortcut works when Relay is focused.
@@ -279,8 +355,10 @@ final class HotkeyManager {
 
     deinit {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+        if let annotateHotKeyRef { UnregisterEventHotKey(annotateHotKeyRef) }
         if let eventHandlerRef { RemoveEventHandler(eventHandlerRef) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        if let annotateLocalMonitor { NSEvent.removeMonitor(annotateLocalMonitor) }
         if let escGlobalMonitor { NSEvent.removeMonitor(escGlobalMonitor) }
         if let escLocalMonitor { NSEvent.removeMonitor(escLocalMonitor) }
         if let globalKeyUpMonitor { NSEvent.removeMonitor(globalKeyUpMonitor) }

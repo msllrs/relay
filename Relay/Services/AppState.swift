@@ -64,6 +64,12 @@ final class AppState: ObservableObject {
         }
     }
     private var mcpBridgeWriter: MCPBridgeWriter?
+    @Published var annotationEnabled: Bool {
+        didSet { UserDefaults.standard.set(annotationEnabled, forKey: "annotationEnabled") }
+    }
+    @Published var annotateWhileRecording: Bool {
+        didSet { UserDefaults.standard.set(annotateWhileRecording, forKey: "annotateWhileRecording") }
+    }
     @Published var itemJustAdded = false
     @Published var isRecording = false
     @Published var displayTranscription = ""
@@ -71,6 +77,7 @@ final class AppState: ObservableObject {
     /// monitors are silently broken — happens after an app update invalidates the binary hash.
     @Published var accessibilityBroken = false
     @Published var accessibilityNotGranted = false
+    @Published var needsScreenRecordingPermission = false
 
     /// Re-check AXIsProcessTrusted() and update the published flag.
     /// Call this when the settings view appears so the banner clears
@@ -106,6 +113,7 @@ final class AppState: ObservableObject {
     let updaterManager = UpdaterManager()
     private var clipboardMonitor: ClipboardMonitor?
     private(set) var hotkeyManager: HotkeyManager?
+    private(set) var annotationManager: AnnotationManager?
     private var cancellables = Set<AnyCancellable>()
 
     /// The change count to ignore (set after we write to the pasteboard)
@@ -144,6 +152,12 @@ final class AppState: ObservableObject {
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
         self.mcpBridgeEnabled = UserDefaults.standard.bool(forKey: "mcpBridgeEnabled")
+        self.annotationEnabled = UserDefaults.standard.bool(forKey: "annotationEnabled")
+        if UserDefaults.standard.object(forKey: "annotateWhileRecording") == nil {
+            self.annotateWhileRecording = true
+        } else {
+            self.annotateWhileRecording = UserDefaults.standard.bool(forKey: "annotateWhileRecording")
+        }
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -156,6 +170,7 @@ final class AppState: ObservableObject {
         }
         clipboardMonitor = ClipboardMonitor(appState: self)
         hotkeyManager = HotkeyManager(appState: self)
+        annotationManager = AnnotationManager(appState: self)
         mcpBridgeWriter = MCPBridgeWriter(appState: self)
         if mcpBridgeEnabled { mcpBridgeWriter?.start() }
 
@@ -166,6 +181,11 @@ final class AppState: ObservableObject {
 
         // Forward voiceManager changes so SwiftUI picks them up
         voiceManager.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        // Forward annotationManager changes (e.g. session active state)
+        annotationManager?.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
@@ -325,6 +345,12 @@ final class AppState: ObservableObject {
         } else {
             startMonitoring()
         }
+    }
+
+    /// Called by HotkeyManager when the standalone annotation shortcut is pressed.
+    func annotateHotkeyTriggered() {
+        guard annotationEnabled else { return }
+        annotationManager?.toggleSession()
     }
 
     /// Called by HotkeyManager when the keyboard shortcut is pressed.
