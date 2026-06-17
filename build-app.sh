@@ -183,8 +183,13 @@ if $NOTARIZE; then
     echo "  $RELEASE_ZIP"
     echo "  $RELEASE_DMG"
 else
-    # Ad-hoc signing for local development
+    # Ad-hoc signing for local development.
+    # Strip extended attributes first — leftover resource forks/Finder xattrs make
+    # codesign emit "resource fork ... not allowed" and produce an invalid signature
+    # that gets SIGKILLed at launch.
+    xattr -cr "$APP_BUNDLE"
     codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
+    codesign --verify --verbose=2 "$APP_DIR/MacOS/Relay" || echo "WARNING: signature verification failed"
 fi
 
 echo "Built $APP_BUNDLE (v${VERSION}, build ${BUILD_NUMBER}, ${CONFIG})"
