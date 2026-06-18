@@ -19,7 +19,20 @@ NOTARIZE_PROFILE="relay-notarize"
 VERSION=$(cat VERSION)
 BUILD_NUMBER=$(git rev-list --count HEAD)
 
-echo "Building Relay v${VERSION} (build ${BUILD_NUMBER}) [${CONFIG}]..."
+# Debug builds get a distinct bundle identity + name so macOS treats them as a
+# separate app from the production install. This keeps their TCC grants (Screen
+# Recording, Accessibility) isolated — without it, "Quit & Reopen" after changing
+# a permission relaunches whichever copy owns com.msllrs.relay (often production),
+# and the dev build never picks up the refreshed grant.
+if [ "$CONFIG" = "debug" ]; then
+    BUNDLE_ID="com.msllrs.relay.dev"
+    DISPLAY_NAME="Relay Dev"
+else
+    BUNDLE_ID="com.msllrs.relay"
+    DISPLAY_NAME="Relay"
+fi
+
+echo "Building Relay v${VERSION} (build ${BUILD_NUMBER}) [${CONFIG}] id=${BUNDLE_ID}..."
 swift build -c "$CONFIG"
 
 APP_DIR=".build/Relay.app/Contents"
@@ -50,9 +63,11 @@ cat > "$APP_DIR/Info.plist" << PLIST
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.msllrs.relay</string>
+	<string>${BUNDLE_ID}</string>
 	<key>CFBundleName</key>
-	<string>Relay</string>
+	<string>${DISPLAY_NAME}</string>
+	<key>CFBundleDisplayName</key>
+	<string>${DISPLAY_NAME}</string>
 	<key>CFBundleExecutable</key>
 	<string>Relay</string>
 	<key>CFBundleShortVersionString</key>
@@ -188,8 +203,24 @@ else
     # codesign emit "resource fork ... not allowed" and produce an invalid signature
     # that gets SIGKILLed at launch.
     xattr -cr "$APP_BUNDLE"
-    codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
+    # Sign debug with Developer ID (not ad-hoc) so the build has a STABLE code
+    # identity. TCC (Screen Recording, Accessibility) attaches grants to that
+    # identity and persists them across rebuilds; ad-hoc signatures change every
+    # build and never reliably land a row in the permission list. Falls back to
+    # ad-hoc if the cert isn't in the keychain.
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGNING_IDENTITY"; then
+        codesign --force --sign "$SIGNING_IDENTITY" \
+            --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
+    else
+        echo "WARNING: Developer ID cert not found — falling back to ad-hoc (Screen Recording grant may not persist)"
+        codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
+    fi
     codesign --verify --verbose=2 "$APP_DIR/MacOS/Relay" || echo "WARNING: signature verification failed"
+
+    # Point LaunchServices at this dev build so "Quit & Reopen" (and `open`) use
+    # it rather than a stale registration or the production copy.
+    LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    "$LSREGISTER" -f "$APP_BUNDLE" 2>/dev/null || true
 fi
 
 echo "Built $APP_BUNDLE (v${VERSION}, build ${BUILD_NUMBER}, ${CONFIG})"
