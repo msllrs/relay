@@ -68,15 +68,22 @@ final class ScreenCaptureService {
         return image
     }
 
-    /// Crop a full-screen image to a pixel rect and save it as a PNG in the
-    /// shared `relay-images/` temp dir. Returns the file path.
-    func cropAndSave(_ full: CGImage, pixelRect: CGRect) -> String? {
+    /// Crop a full-screen image to a pixel rect, optionally burn the drawn
+    /// strokes onto it, and save it as a PNG in the shared `relay-images/` temp
+    /// dir. `strokes` are in screen-local points (bottom-left); they are mapped
+    /// into the cropped image's pixel space so the mark stays pixel-accurate.
+    func cropAndSave(_ full: CGImage, pixelRect: CGRect, strokes: [[CGPoint]] = [], screen: NSScreen? = nil) -> String? {
         let clamped = pixelRect.intersection(CGRect(x: 0, y: 0, width: full.width, height: full.height))
         guard !clamped.isNull, clamped.width >= 1, clamped.height >= 1,
               let cropped = full.cropping(to: clamped) else { return nil }
 
-        let rep = NSBitmapImageRep(cgImage: cropped)
-        guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
+        let png: Data?
+        if strokes.isEmpty || screen == nil {
+            png = NSBitmapImageRep(cgImage: cropped).representation(using: .png, properties: [:])
+        } else {
+            png = renderStrokes(strokes, onto: cropped, cropPixelRect: clamped, screen: screen!)
+        }
+        guard let png else { return nil }
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("relay-images", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -89,6 +96,55 @@ final class ScreenCaptureService {
         }
     }
 
+    /// Draw the strokes onto the cropped image and return PNG data. Works in the
+    /// cropped image's pixel space (top-left origin): each screen point is mapped
+    /// to full-image pixels (Y-flip + scale), then offset by the crop origin.
+    private func renderStrokes(_ strokes: [[CGPoint]], onto cropped: CGImage, cropPixelRect: CGRect, screen: NSScreen) -> Data? {
+        let w = cropped.width, h = cropped.height
+        let scale = screen.backingScaleFactor
+        let screenHeight = screen.frame.height
+
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return NSBitmapImageRep(cgImage: cropped).representation(using: .png, properties: [:])
+        }
+
+        // CGContext is bottom-left origin; the cropped CGImage is top-left. Drawing
+        // the image fills the context right-side-up.
+        ctx.draw(cropped, in: CGRect(x: 0, y: 0, width: w, height: h))
+
+        // Map a screen point (bottom-left) into this context's space (bottom-left,
+        // pixels, relative to the crop).
+        func mapped(_ p: CGPoint) -> CGPoint {
+            let pxX = p.x * scale - cropPixelRect.minX
+            // full-image top-left Y of the point:
+            let topY = (screenHeight - p.y) * scale
+            // context (bottom-left) Y within the crop:
+            let ctxY = CGFloat(h) - (topY - cropPixelRect.minY)
+            return CGPoint(x: pxX, y: ctxY)
+        }
+
+        ctx.setStrokeColor(NSColor.systemOrange.cgColor)
+        ctx.setLineWidth(3 * scale)
+        ctx.setLineCap(.round)
+        ctx.setLineJoin(.round)
+        for stroke in strokes {
+            guard let first = stroke.first else { continue }
+            ctx.beginPath()
+            ctx.move(to: mapped(first))
+            for pt in stroke.dropFirst() { ctx.addLine(to: mapped(pt)) }
+            ctx.strokePath()
+        }
+
+        guard let marked = ctx.makeImage() else {
+            return NSBitmapImageRep(cgImage: cropped).representation(using: .png, properties: [:])
+        }
+        return NSBitmapImageRep(cgImage: marked).representation(using: .png, properties: [:])
+    }
+
     func invalidateCache() { cached = nil }
 
     // MARK: - Coordinate conversion
@@ -99,6 +155,12 @@ final class ScreenCaptureService {
     /// and the Retina backing scale.
     static func toPixelRect(_ rectInPanel: CGRect, screen: NSScreen) -> CGRect {
         toPixelRect(rectInPanel, screenHeight: screen.frame.height, scale: screen.backingScaleFactor)
+    }
+
+    /// The full pixel bounds of a screen (origin .zero, size = points × scale).
+    static func fullScreenPixelRect(_ screen: NSScreen) -> CGRect {
+        let scale = screen.backingScaleFactor
+        return CGRect(x: 0, y: 0, width: screen.frame.width * scale, height: screen.frame.height * scale)
     }
 
     /// Pure form of the conversion (no NSScreen) so the Y-flip + Retina scaling

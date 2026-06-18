@@ -44,6 +44,9 @@ final class HotkeyManager {
     nonisolated(unsafe) private var escLocalMonitor: Any?
     nonisolated(unsafe) private var globalKeyUpMonitor: Any?
     nonisolated(unsafe) private var localKeyUpMonitor: Any?
+    nonisolated(unsafe) private var annotateGlobalKeyUpMonitor: Any?
+    nonisolated(unsafe) private var annotateLocalKeyUpMonitor: Any?
+    nonisolated(unsafe) private var annotateFlagsMonitors: [Any] = []
     /// Prevents opening System Settings repeatedly when AXIsProcessTrusted() returns
     /// false transiently (e.g. after a sleep/wake cycle).
     private var didRedirectToAccessibilitySettings = false
@@ -353,6 +356,55 @@ final class HotkeyManager {
         localKeyUpMonitor = nil
     }
 
+    /// Fires when the annotation shortcut's key is released — the "release to
+    /// capture" signal for push-to-draw. Watches the base key and the modifiers
+    /// (releasing any part of the combo ends the hold).
+    func startAnnotateKeyUpMonitor(onRelease: @escaping @MainActor () -> Void) {
+        stopAnnotateKeyUpMonitor()
+
+        let keyCode = currentAnnotateShortcut.keyCode
+        let requiredMods = currentAnnotateShortcut.modifierFlags
+
+        // Base-key release (keyUp).
+        annotateGlobalKeyUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyUp) { event in
+            if event.keyCode == keyCode {
+                MainActor.assumeIsolated { onRelease() }
+            }
+        }
+        annotateLocalKeyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { event in
+            if event.keyCode == keyCode {
+                MainActor.assumeIsolated { onRelease() }
+                return nil
+            }
+            return event
+        }
+
+        // Modifier release (flagsChanged): if the held modifiers are no longer
+        // all present, the combo was broken — treat as release.
+        let modHandler: (NSEvent) -> Void = { event in
+            let now = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if !now.isSuperset(of: requiredMods) {
+                MainActor.assumeIsolated { onRelease() }
+            }
+        }
+        // Reuse the existing flags monitors slots is unsafe; attach standalone ones
+        // that we tear down together with the key-up monitors.
+        let g = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { modHandler($0) }
+        let l = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { modHandler($0); return $0 }
+        annotateFlagsMonitors = [g, l].compactMap { $0 }
+
+        detectAccessibilityBrokenIfNeeded(globalMonitor: annotateGlobalKeyUpMonitor)
+    }
+
+    func stopAnnotateKeyUpMonitor() {
+        if let annotateGlobalKeyUpMonitor { NSEvent.removeMonitor(annotateGlobalKeyUpMonitor) }
+        if let annotateLocalKeyUpMonitor { NSEvent.removeMonitor(annotateLocalKeyUpMonitor) }
+        annotateGlobalKeyUpMonitor = nil
+        annotateLocalKeyUpMonitor = nil
+        for m in annotateFlagsMonitors { NSEvent.removeMonitor(m) }
+        annotateFlagsMonitors = []
+    }
+
     deinit {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let annotateHotKeyRef { UnregisterEventHotKey(annotateHotKeyRef) }
@@ -363,5 +415,8 @@ final class HotkeyManager {
         if let escLocalMonitor { NSEvent.removeMonitor(escLocalMonitor) }
         if let globalKeyUpMonitor { NSEvent.removeMonitor(globalKeyUpMonitor) }
         if let localKeyUpMonitor { NSEvent.removeMonitor(localKeyUpMonitor) }
+        if let annotateGlobalKeyUpMonitor { NSEvent.removeMonitor(annotateGlobalKeyUpMonitor) }
+        if let annotateLocalKeyUpMonitor { NSEvent.removeMonitor(annotateLocalKeyUpMonitor) }
+        for m in annotateFlagsMonitors { NSEvent.removeMonitor(m) }
     }
 }

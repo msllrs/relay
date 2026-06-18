@@ -70,6 +70,12 @@ final class AppState: ObservableObject {
     @Published var annotateWhileRecording: Bool {
         didSet { UserDefaults.standard.set(annotateWhileRecording, forKey: "annotateWhileRecording") }
     }
+    @Published var annotationCaptureScope: CaptureScope {
+        didSet { UserDefaults.standard.set(annotationCaptureScope.rawValue, forKey: "annotationCaptureScope") }
+    }
+    @Published var annotationAllowMultiple: Bool {
+        didSet { UserDefaults.standard.set(annotationAllowMultiple, forKey: "annotationAllowMultiple") }
+    }
     @Published var itemJustAdded = false
     @Published var isRecording = false
     @Published var displayTranscription = ""
@@ -158,6 +164,8 @@ final class AppState: ObservableObject {
         } else {
             self.annotateWhileRecording = UserDefaults.standard.bool(forKey: "annotateWhileRecording")
         }
+        self.annotationCaptureScope = CaptureScope(rawValue: UserDefaults.standard.string(forKey: "annotationCaptureScope") ?? "") ?? .crop
+        self.annotationAllowMultiple = UserDefaults.standard.bool(forKey: "annotationAllowMultiple")
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -187,6 +195,14 @@ final class AppState: ObservableObject {
         // Forward annotationManager changes (e.g. session active state)
         annotationManager?.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        // Stop the annotation key-up monitor whenever a session ends (covers the
+        // Return/Esc finish paths that don't go through the release callback).
+        annotationManager?.$isSessionActive
+            .dropFirst()
+            .filter { !$0 }
+            .sink { [weak self] _ in self?.hotkeyManager?.stopAnnotateKeyUpMonitor() }
             .store(in: &cancellables)
 
         // Mirror voiceManager.isRecording so SwiftUI can track it
@@ -362,10 +378,25 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Called by HotkeyManager when the standalone annotation shortcut is pressed.
+    /// Called by HotkeyManager when the annotation shortcut is pressed.
+    /// Push-to-draw: begin a session and end (or commit) it when released.
     func annotateHotkeyTriggered() {
         guard annotationEnabled else { return }
-        annotationManager?.toggleSession()
+        let wasActive = annotationManager?.isSessionActive == true
+        annotationManager?.beginHold()
+        guard annotationManager?.isSessionActive == true else { return }
+        // Install the release monitor once per session. In multi mode it stays
+        // armed across holds; each release commits a mark and the session lives
+        // on until Return/Esc, so we only stop the monitor when the session ends.
+        if !wasActive {
+            hotkeyManager?.startAnnotateKeyUpMonitor { [weak self] in
+                guard let self else { return }
+                self.annotationManager?.finishHold()
+                if self.annotationManager?.isSessionActive != true {
+                    self.hotkeyManager?.stopAnnotateKeyUpMonitor()
+                }
+            }
+        }
     }
 
     /// Called by HotkeyManager when the keyboard shortcut is pressed.

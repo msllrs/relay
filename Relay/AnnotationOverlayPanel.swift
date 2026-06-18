@@ -101,9 +101,15 @@ final class AnnotationPanel: NSPanel {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // Escape
+        if event.keyCode == 53 { // Escape — cancel
             MainActor.assumeIsolated {
                 manager?.endSession()
+            }
+            return
+        }
+        if event.keyCode == 36 || event.keyCode == 76 { // Return / keypad Enter — finish multi
+            MainActor.assumeIsolated {
+                manager?.commitMultiSession()
             }
             return
         }

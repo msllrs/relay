@@ -25,7 +25,9 @@ enum AnnotationShape: String {
         switch self {
         case .circle:   bbox.insetBy(dx: -10, dy: -10)
         case .x:        bbox.insetBy(dx: -bbox.width * 0.2, dy: -bbox.height * 0.2)
-        case .arrow:    bbox
+        // An arrow points FROM somewhere TO somewhere — give generous context
+        // around both ends (especially the tip) so the destination is in frame.
+        case .arrow:    bbox.insetBy(dx: -max(60, bbox.width * 0.4), dy: -max(60, bbox.height * 0.4))
         case .freeform: bbox.insetBy(dx: -8, dy: -8)
         }
     }

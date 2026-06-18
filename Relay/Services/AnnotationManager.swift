@@ -1,37 +1,51 @@
 import AppKit
 import Combine
 
+/// What region a finished annotation captures.
+enum CaptureScope: String, CaseIterable, Identifiable {
+    case crop        // crop to the drawn marks (per-shape padding)
+    case fullScreen  // the entire display, with the marks burned in
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .crop: "Crop to mark"
+        case .fullScreen: "Full screen"
+        }
+    }
+}
+
 /// Orchestrates an annotation session: shows the full-screen overlay, collects
 /// drawn strokes, classifies the gesture, captures + crops the screen region,
 /// and adds the result to the context stack as an `.annotation` item.
 ///
-/// Two session modes:
-/// - `.modal` — standalone hotkey. The overlay is key and captures all drawing
-///   directly; one gesture finishes the session (Esc cancels).
-/// - `.armed` — auto-armed while recording. The overlay is click-through so the
-///   user keeps using their apps; holding Option makes it drawable, and each
-///   completed gesture is captured while the session stays armed for the next.
+/// "Push to draw": the user holds the annotation shortcut (e.g. ⌃⌥A); while held
+/// the overlay is up and drawing is live (all strokes stay visible). Releasing
+/// the shortcut is the finish signal — it captures the whole gesture. Release,
+/// not a timer, ends the hold, so multi-stroke shapes (arrow shaft + head, X's
+/// two diagonals) work regardless of how long you pause between strokes.
+///
+/// AppState drives the lifecycle: it starts a session on the hotkey press and
+/// calls `finishHold()` from the key-up monitor on release.
 @MainActor
 final class AnnotationManager: ObservableObject {
-    enum Mode { case modal, armed }
-
     @Published private(set) var isSessionActive = false
-    @Published private(set) var isDrawingEnabled = false
+    /// True when this session collects multiple gestures (Return/Esc to finish).
+    @Published private(set) var isMultiMode = false
 
     private weak var appState: AppState?
     private let capture = ScreenCaptureService()
     private var overlay: AnnotationOverlayController?
-    private var mode: Mode = .modal
 
-    /// Strokes completed in the current gesture group, in screen-local points
+    /// Strokes drawn during the current hold, in screen-local points
     /// (bottom-left origin) of the screen being annotated.
     private var strokes: [[CGPoint]] = []
-    private var finalizeTask: Task<Void, Never>?
+    /// In multi mode, strokes committed from prior holds this session.
+    private var committedStrokes: [[CGPoint]] = []
+    private var isStrokeInProgress = false
+    private var pendingFinish = false
     private var activeScreen: NSScreen?
-
-    /// Global Option-key monitor (armed mode only — requires Accessibility).
-    private var flagsMonitor: Any?
-    private var localFlagsMonitor: Any?
+    private var captureScope: CaptureScope = .crop
 
     init(appState: AppState) {
         self.appState = appState
@@ -39,161 +53,149 @@ final class AnnotationManager: ObservableObject {
 
     // MARK: - Session lifecycle
 
-    /// Begin a standalone modal annotation session (drawable immediately).
-    func startSession() {
-        startSession(mode: .modal)
-    }
-
-    private func startSession(mode: Mode) {
-        guard !isSessionActive else { return }
-        guard capture.requestPermission() else {
-            appState?.needsScreenRecordingPermission = true
+    /// Begin a push-to-draw session (called on shortcut press). Drawing is live
+    /// for the whole hold; `finishHold()` ends it (single mode) or commits it
+    /// (multi mode).
+    func beginHold() {
+        if isSessionActive {
+            // Multi mode: a subsequent hold draws another mark on the same session.
             return
         }
-        appState?.needsScreenRecordingPermission = false
+        // Reflect permission state, but DON'T gate the overlay on it — show the
+        // drawing surface regardless so the shortcut always gives feedback. The
+        // grant is only actually required at capture time; if it's missing the
+        // prompt fires there and the Settings banner explains the next step.
+        let granted = capture.hasPermission()
+        appState?.needsScreenRecordingPermission = !granted
+        if !granted { capture.requestPermission() } // surface the system prompt
 
-        self.mode = mode
+        captureScope = appState?.annotationCaptureScope ?? .crop
+        isMultiMode = appState?.annotationAllowMultiple ?? false
         capture.invalidateCache()
         strokes = []
+        committedStrokes = []
+        isStrokeInProgress = false
+        pendingFinish = false
         activeScreen = NSScreen.main
 
         let overlay = AnnotationOverlayController(manager: self)
-        overlay.show(clickThrough: mode == .armed)
+        overlay.show(clickThrough: false) // key window; pen draws immediately
         self.overlay = overlay
         isSessionActive = true
-        isDrawingEnabled = (mode == .modal)
+    }
 
-        if mode == .armed { startOptionMonitor() }
+    /// Release of the shortcut. Single mode → capture + dismiss. Multi mode →
+    /// commit this hold's strokes and keep the overlay open for more.
+    func finishHold() {
+        guard isSessionActive else { return }
+        // If a stroke is mid-draw, let mouseUp land first, then finish.
+        if isStrokeInProgress {
+            pendingFinish = true
+            return
+        }
+        if isMultiMode {
+            committedStrokes.append(contentsOf: strokes)
+            strokes = []
+            return // stay active; Return finalizes, Esc cancels
+        }
+        if strokes.isEmpty {
+            endSession() // nothing drawn — just dismiss
+            return
+        }
+        finalizeGesture()
+    }
+
+    /// Return key in multi mode → finalize everything drawn this session.
+    func commitMultiSession() {
+        guard isSessionActive, isMultiMode else { return }
+        committedStrokes.append(contentsOf: strokes)
+        strokes = []
+        if committedStrokes.isEmpty { endSession(); return }
+        finalizeGesture()
     }
 
     func endSession() {
         guard isSessionActive else { return }
-        finalizeTask?.cancel()
-        finalizeTask = nil
-        stopOptionMonitor()
         overlay?.hide()
         overlay = nil
         strokes = []
+        committedStrokes = []
+        isStrokeInProgress = false
+        pendingFinish = false
         activeScreen = nil
         isSessionActive = false
-        isDrawingEnabled = false
+        isMultiMode = false
     }
 
-    /// Toggle for the standalone hotkey.
-    func toggleSession() {
-        if isSessionActive { endSession() } else { startSession(mode: .modal) }
-    }
+    // MARK: - Recording auto-arm
 
-    // MARK: - Recording auto-arm (armed mode)
-
-    /// Arm the click-through overlay for the duration of a recording. Requires
-    /// Accessibility for the global Option monitor; without it we skip arming
-    /// and the user can fall back to the standalone hotkey.
-    func armForRecording() {
-        guard !isSessionActive else { return }
-        guard AXIsProcessTrusted() else { return }
-        startSession(mode: .armed)
-    }
-
-    func disarmForRecording() {
-        guard isSessionActive, mode == .armed else { return }
-        endSession()
-    }
-
-    // MARK: - Option-gated drawing (armed mode)
-
-    private func startOptionMonitor() {
-        stopOptionMonitor()
-        let handler: (NSEvent) -> Void = { [weak self] event in
-            MainActor.assumeIsolated {
-                self?.setDrawingEnabled(event.modifierFlags.contains(.option))
-            }
-        }
-        flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
-            handler(event)
-        }
-        localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            handler(event)
-            return event
-        }
-    }
-
-    private func stopOptionMonitor() {
-        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
-        if let localFlagsMonitor { NSEvent.removeMonitor(localFlagsMonitor) }
-        flagsMonitor = nil
-        localFlagsMonitor = nil
-    }
-
-    private func setDrawingEnabled(_ enabled: Bool) {
-        guard mode == .armed, isSessionActive else { return }
-        // Don't drop drawability mid-gesture (e.g. a brief Option release).
-        if !enabled && finalizeTask != nil { return }
-        guard enabled != isDrawingEnabled else { return }
-        isDrawingEnabled = enabled
-        overlay?.setClickThrough(!enabled)
-    }
+    /// Currently a no-op: while recording, the user holds the same annotation
+    /// shortcut to draw, which routes through begin/finishHold like the
+    /// standalone path. Kept for the AppState recording sink to call.
+    func armForRecording() {}
+    func disarmForRecording() { endSession() }
 
     // MARK: - Stroke input (called by the drawing view)
 
     func beginStroke(on screen: NSScreen) {
-        finalizeTask?.cancel()
-        finalizeTask = nil
+        isStrokeInProgress = true
         activeScreen = screen
     }
 
-    /// A stroke finished. Wait briefly for a possible second crossing stroke
-    /// (the two-stroke X) before finalizing.
     func completeStroke(_ points: [CGPoint], on screen: NSScreen) {
-        guard points.count >= 2 else { return }
-        activeScreen = screen
-        strokes.append(points)
-
-        finalizeTask?.cancel()
-        finalizeTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(450))
-            guard !Task.isCancelled else { return }
-            await self?.finalize()
+        isStrokeInProgress = false
+        if points.count >= 2 {
+            activeScreen = screen
+            strokes.append(points)
+        }
+        // The shortcut was released mid-stroke — finish now that the pen is up.
+        if pendingFinish {
+            pendingFinish = false
+            finishHold()
         }
     }
 
     // MARK: - Finalize
 
-    private func finalize() async {
-        guard !strokes.isEmpty, let screen = activeScreen else { return }
-        let shape = ShapeClassifier.classify(strokes: strokes)
-        let bbox = ShapeClassifier.unionBoundingBox(strokes)
-        let padded = shape.paddedRect(bbox)
-        let pixelRect = ScreenCaptureService.toPixelRect(padded, screen: screen)
+    private func finalizeGesture() {
+        let allStrokes = committedStrokes + strokes
+        guard !allStrokes.isEmpty, let screen = activeScreen else { endSession(); return }
+        let shape = ShapeClassifier.classify(strokes: allStrokes)
+        let scope = captureScope
 
-        let sessionMode = mode
-        strokes = []
-        finalizeTask = nil
-
-        // Remove the rendered strokes from the screen before capturing.
-        if sessionMode == .modal {
-            // Modal: one gesture ends the session.
-            endSession()
-        } else {
-            // Armed: keep the session, just clear the drawing and return to pass-through.
-            overlay?.clearStrokes()
-            isDrawingEnabled = false
-            overlay?.setClickThrough(true)
+        let pixelRect: CGRect
+        switch scope {
+        case .fullScreen:
+            // The whole display, in pixels.
+            pixelRect = ScreenCaptureService.fullScreenPixelRect(screen)
+        case .crop:
+            let bbox = ShapeClassifier.unionBoundingBox(allStrokes)
+            pixelRect = ScreenCaptureService.toPixelRect(shape.paddedRect(bbox), screen: screen)
         }
 
-        // Let the window server flush the overlay change, and bypass the cache.
-        capture.invalidateCache()
-        try? await Task.sleep(for: .milliseconds(80))
+        // Dismiss the overlay (and its rendered strokes) before capturing so the
+        // shot is clean — we re-draw the marks onto the image ourselves.
+        endSession()
+
+        Task { [weak self] in
+            guard let self else { return }
+            self.capture.invalidateCache()
+            try? await Task.sleep(for: .milliseconds(80))
+            await self.captureAndStore(pixelRect: pixelRect, screen: screen, shape: shape, strokes: allStrokes)
+        }
+    }
+
+    private func captureAndStore(pixelRect: CGRect, screen: NSScreen, shape: AnnotationShape, strokes: [[CGPoint]]) async {
         do {
             let full = try await capture.captureFullScreen(of: screen)
-            guard let path = capture.cropAndSave(full, pixelRect: pixelRect) else { return }
+            guard let path = capture.cropAndSave(full, pixelRect: pixelRect, strokes: strokes, screen: screen) else { return }
             appState?.addItem(ClipboardItem(
                 contentType: .annotation,
                 textContent: shape.intentLabel,
                 imagePath: path
             ))
         } catch {
-            NSLog("AnnotationManager.finalize capture failed: \(error)")
+            NSLog("AnnotationManager capture failed: \(error)")
         }
     }
 }

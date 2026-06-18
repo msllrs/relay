@@ -154,6 +154,18 @@ struct SettingsPage: View {
             if appState.annotationEnabled {
                 SettingsToggle("Annotate while recording", isOn: $appState.annotateWhileRecording)
 
+                SettingsRow("Capture") {
+                    Picker("Capture", selection: $appState.annotationCaptureScope) {
+                        ForEach(CaptureScope.allCases) { scope in
+                            Text(scope.label).tag(scope)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+
+                SettingsToggle("Allow multiple annotations", isOn: $appState.annotationAllowMultiple)
+
                 SettingsRow("Annotation shortcut") {
                     ShortcutRecorderButton(
                         initial: KeyboardShortcutModel.load(
