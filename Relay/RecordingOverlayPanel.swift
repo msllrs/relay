@@ -12,6 +12,8 @@ final class RecordingOverlayController {
     private var dragMonitor: Any?
     private var dragStartOrigin: NSPoint?
     private var dragStartMouse: NSPoint?
+    private let visibility = OverlayVisibility()
+    private var hideTask: Task<Void, Never>?
 
     init(appState: AppState) {
         let panel = NSPanel(
@@ -28,9 +30,8 @@ final class RecordingOverlayController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = false
         panel.isMovable = false
-        panel.alphaValue = 0
 
-        let view = RecordingOverlayView().environmentObject(appState)
+        let view = RecordingOverlayView(visibility: visibility).environmentObject(appState)
         let hosting = NSHostingView(rootView: AnyView(view))
         hosting.frame = NSRect(x: 0, y: 0, width: 56, height: 56)
         panel.contentView = hosting
@@ -40,6 +41,8 @@ final class RecordingOverlayController {
     }
 
     func show(below statusItemButton: NSStatusBarButton) {
+        hideTask?.cancel()
+        hideTask = nil
         self.statusItemButton = statusItemButton
         let origin = defaultOrigin()
         cachedDefaultOrigin = origin
@@ -47,24 +50,25 @@ final class RecordingOverlayController {
         panel.orderFrontRegardless()
         installDragMonitor()
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().alphaValue = 1
+        // Defer one runloop turn so the collapsed state renders first,
+        // then the SwiftUI spring animates the bubble growing out of the menubar.
+        DispatchQueue.main.async { [visibility] in
+            MainActor.assumeIsolated {
+                visibility.visible = true
+            }
         }
     }
 
     func hide() {
         removeDragMonitor()
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.15
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [panel] in
-            MainActor.assumeIsolated {
-                panel.orderOut(nil)
-            }
-        })
+        visibility.visible = false
+        hideTask?.cancel()
+        // Keep the panel on screen until the SwiftUI retract animation finishes.
+        hideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.panel.orderOut(nil)
+        }
     }
 
     // MARK: - Positioning

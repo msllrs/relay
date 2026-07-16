@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Shared visibility state between RecordingOverlayController and the SwiftUI view,
+/// so the spawn/retract animation runs inside SwiftUI rather than on the panel's alpha.
+@MainActor
+final class OverlayVisibility: ObservableObject {
+    @Published var visible = false
+}
+
 struct MiniWaveformView: View {
     let level: Float
 
@@ -66,6 +73,7 @@ struct ClipboardRelayIcon: View {
 
 struct RecordingOverlayView: View {
     @EnvironmentObject private var appState: AppState
+    @ObservedObject var visibility: OverlayVisibility
     @State private var isHovering = false
 
     private let circleSize: CGFloat = 36
@@ -106,22 +114,42 @@ struct RecordingOverlayView: View {
                 .frame(width: circleSize - 1, height: circleSize - 1)
                 .blendMode(.screen)
 
-            switch mode {
-            case .waveform:
-                MiniWaveformView(level: appState.voiceManager.audioLevel)
-                    .transition(.opacity.combined(with: .scale))
-            case .clipboard:
-                ClipboardRelayIcon()
-                    .frame(width: 14, height: 14)
-                    .transition(.opacity.combined(with: .scale))
-            case .stop:
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(.white)
-                    .frame(width: 10, height: 10)
-                    .transition(.opacity.combined(with: .scale))
+            Group {
+                switch mode {
+                case .waveform:
+                    MiniWaveformView(level: appState.voiceManager.audioLevel)
+                        .transition(.opacity.combined(with: .scale))
+                case .clipboard:
+                    ClipboardRelayIcon()
+                        .frame(width: 14, height: 14)
+                        .transition(.opacity.combined(with: .scale))
+                case .stop:
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(.white)
+                        .frame(width: 10, height: 10)
+                        .transition(.opacity.combined(with: .scale))
+                }
             }
+            // Contents reveal just after the bubble finishes growing.
+            .opacity(visibility.visible ? 1 : 0)
+            .animation(
+                visibility.visible
+                    ? .easeOut(duration: 0.2).delay(0.15)
+                    : .easeOut(duration: 0.1),
+                value: visibility.visible
+            )
         }
         .frame(width: circleSize, height: circleSize)
+        // Spawn: emerge from beneath the menubar icon, growing downward with a
+        // springy overshoot. Retract: shrink back up into the bar.
+        .scaleEffect(visibility.visible ? 1 : 0.05, anchor: .top)
+        .opacity(visibility.visible ? 1 : 0)
+        .animation(
+            visibility.visible
+                ? .spring(response: 0.4, dampingFraction: 0.68)
+                : .spring(response: 0.25, dampingFraction: 0.9),
+            value: visibility.visible
+        )
         .padding(10) // room for shadow
         .contentShape(Circle())
         .onHover { hovering in
