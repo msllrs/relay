@@ -80,7 +80,7 @@ final class RecordingOverlayController {
         let buttonRect = button.convert(button.bounds, to: nil)
         let screenRect = buttonWindow.convertToScreen(buttonRect)
         let x = screenRect.midX - panelSize / 2
-        let y = screenRect.minY - panelSize - 4
+        let y = screenRect.minY - panelSize
         return NSPoint(x: x, y: y)
     }
 
