@@ -187,8 +187,11 @@ final class AnnotationManager: ObservableObject {
         }
 
         // Dismiss the overlay (and its rendered strokes) before capturing so the
-        // shot is clean — we re-draw the marks onto the image ourselves.
+        // shot is clean — we re-draw the marks onto the image ourselves. The
+        // smoky dissolve plays on its own capture-excluded panel, so it can run
+        // while the screenshot happens without contaminating it.
         endSession()
+        AnnotationDissolvePanel.play(strokes: allStrokes, on: screen)
 
         Task { [weak self] in
             guard let self else { return }
