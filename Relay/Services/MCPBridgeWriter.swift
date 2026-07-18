@@ -29,10 +29,21 @@ final class MCPBridgeWriter {
     }
 
     func start() {
+        // Clean up any previous subscriptions before re-subscribing
+        cancellables.removeAll()
+        signalTimer?.invalidate()
+
         guard let appState else { return }
 
+        // objectWillChange fires before the new value is applied.
+        // Delay with .receive(on:) so performWrite reads the updated state.
         appState.objectWillChange
-            .receive(on: RunLoop.main)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.scheduleWrite() }
+            .store(in: &cancellables)
+
+        appState.stack.objectWillChange
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleWrite() }
             .store(in: &cancellables)
 
