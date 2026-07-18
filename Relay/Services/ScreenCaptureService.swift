@@ -21,6 +21,11 @@ final class ScreenCaptureService {
     private var cached: Cached?
     private let cacheTTL: TimeInterval = 0.4
 
+    /// Cached content filter per display. Enumerating SCShareableContent is what
+    /// re-triggers the Screen Recording prompt on every call, so we enumerate
+    /// once and reuse the filter for subsequent captures.
+    private var cachedFilters: [CGDirectDisplayID: SCContentFilter] = [:]
+
     // MARK: - Permission
 
     /// True if screen-recording access is already granted (no prompt).
@@ -46,16 +51,31 @@ final class ScreenCaptureService {
             return c.image
         }
 
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
-            throw CaptureError.noDisplay
+        // Reuse a cached filter when we have one — enumerating shareable content
+        // is the call that re-prompts for Screen Recording on every capture.
+        let filter: SCContentFilter
+        let displayWidth: Int
+        let displayHeight: Int
+        if let cachedFilter = cachedFilters[displayID] {
+            filter = cachedFilter
+            displayWidth = Int(screen.frame.width)
+            displayHeight = Int(screen.frame.height)
+        } else {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+                throw CaptureError.noDisplay
+            }
+            let newFilter = SCContentFilter(display: display, excludingWindows: [])
+            cachedFilters[displayID] = newFilter
+            filter = newFilter
+            displayWidth = display.width
+            displayHeight = display.height
         }
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
         let config = SCStreamConfiguration()
         let scale = Int(screen.backingScaleFactor)
-        config.width = display.width * scale
-        config.height = display.height * scale
+        config.width = displayWidth * scale
+        config.height = displayHeight * scale
         config.showsCursor = false
 
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)

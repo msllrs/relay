@@ -46,9 +46,22 @@ final class AnnotationManager: ObservableObject {
     private var pendingFinish = false
     private var activeScreen: NSScreen?
     private var captureScope: CaptureScope = .crop
+    /// We only ever surface the system permission prompt once per launch.
+    private var didRequestPermission = false
 
     init(appState: AppState) {
         self.appState = appState
+    }
+
+    /// Request Screen Recording access at most once per launch, and only when
+    /// preflight says it's missing. Avoids re-prompting on every hold (preflight
+    /// caches a stale `false`).
+    private func requestPermissionOnceIfNeeded() {
+        guard !didRequestPermission else { return }
+        if !capture.hasPermission() {
+            didRequestPermission = true
+            capture.requestPermission()
+        }
     }
 
     // MARK: - Session lifecycle
@@ -61,13 +74,13 @@ final class AnnotationManager: ObservableObject {
             // Multi mode: a subsequent hold draws another mark on the same session.
             return
         }
-        // Reflect permission state, but DON'T gate the overlay on it — show the
-        // drawing surface regardless so the shortcut always gives feedback. The
-        // grant is only actually required at capture time; if it's missing the
-        // prompt fires there and the Settings banner explains the next step.
-        let granted = capture.hasPermission()
-        appState?.needsScreenRecordingPermission = !granted
-        if !granted { capture.requestPermission() } // surface the system prompt
+        // NOTE: do NOT call requestPermission()/preflight here. CGPreflightScreen-
+        // CaptureAccess() caches a stale `false` for the process lifetime even after
+        // the grant, so prompting on every hold re-shows the dialog forever while
+        // capture actually succeeds. We surface the prompt at most once per launch
+        // (below) and otherwise let the capture path + Settings banner handle a real
+        // denial — a failed capture, not preflight, is the source of truth.
+        requestPermissionOnceIfNeeded()
 
         captureScope = appState?.annotationCaptureScope ?? .crop
         isMultiMode = appState?.annotationAllowMultiple ?? false
@@ -188,6 +201,9 @@ final class AnnotationManager: ObservableObject {
     private func captureAndStore(pixelRect: CGRect, screen: NSScreen, shape: AnnotationShape, strokes: [[CGPoint]]) async {
         do {
             let full = try await capture.captureFullScreen(of: screen)
+            // Capture succeeded — clear any stale "needs permission" banner that
+            // preflight may have set.
+            appState?.needsScreenRecordingPermission = false
             guard let path = capture.cropAndSave(full, pixelRect: pixelRect, strokes: strokes, screen: screen) else { return }
             appState?.addItem(ClipboardItem(
                 contentType: .annotation,
@@ -195,7 +211,9 @@ final class AnnotationManager: ObservableObject {
                 imagePath: path
             ))
         } catch {
+            // A failed/blank capture is the real signal that permission is missing.
             NSLog("AnnotationManager capture failed: \(error)")
+            appState?.needsScreenRecordingPermission = true
         }
     }
 }
