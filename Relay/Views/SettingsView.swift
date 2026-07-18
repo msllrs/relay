@@ -122,7 +122,7 @@ struct SettingsPage: View {
             SettingsRow("Input") {
                 Picker("Input", selection: $appState.selectedInputDeviceID) {
                     Text("System Default").tag(UInt32(0))
-                    ForEach(AudioDeviceManager.inputDevices()) { device in
+                    ForEach(appState.availableInputDevices) { device in
                         Text(device.name).tag(device.id)
                     }
                 }

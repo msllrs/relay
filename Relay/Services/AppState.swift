@@ -53,6 +53,9 @@ final class AppState: ObservableObject {
             voiceManager.inputDeviceID = selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
         }
     }
+    /// Live list of input devices, refreshed on hotplug so the settings picker never goes stale.
+    @Published var availableInputDevices: [AudioDevice] = AudioDeviceManager.inputDevices()
+    private let audioDeviceMonitor = AudioDeviceMonitor()
     @Published var mcpBridgeEnabled: Bool {
         didSet {
             UserDefaults.standard.set(mcpBridgeEnabled, forKey: "mcpBridgeEnabled")
@@ -90,6 +93,18 @@ final class AppState: ObservableObject {
     /// promptly after the user grants permission.
     func refreshAccessibilityStatus() {
         accessibilityNotGranted = !AXIsProcessTrusted()
+    }
+
+    /// Refresh the input-device list on hotplug. If the selected device
+    /// disappeared, fall back to System Default so the picker never shows
+    /// an empty selection — and recover any in-flight recording.
+    private func handleAudioDevicesChanged() {
+        let devices = AudioDeviceManager.inputDevices()
+        availableInputDevices = devices
+        if selectedInputDeviceID != 0, !devices.contains(where: { $0.id == selectedInputDeviceID }) {
+            selectedInputDeviceID = 0
+            voiceManager.captureDeviceDisappeared()
+        }
     }
     let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
     private var demoScenarioIndex = 0
@@ -176,6 +191,16 @@ final class AppState: ObservableObject {
                 voiceManager.inputDeviceID = storedDeviceID
             }
         }
+        // Track device hotplug and default-input changes so the selection and
+        // any in-flight recording stay valid when devices come and go.
+        audioDeviceMonitor.onDevicesChanged = { [weak self] in
+            self?.handleAudioDevicesChanged()
+        }
+        audioDeviceMonitor.onDefaultInputDeviceChanged = { [weak self] in
+            self?.voiceManager.defaultInputDeviceChanged()
+        }
+        audioDeviceMonitor.start()
+
         clipboardMonitor = ClipboardMonitor(appState: self)
         hotkeyManager = HotkeyManager(appState: self)
         annotationManager = AnnotationManager(appState: self)

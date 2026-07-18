@@ -21,6 +21,8 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     private var audioEngine: AVAudioEngine?
     private var isStreamingFlag = false
     private var pollingTask: Task<Void, Never>?
+    /// Kept for mid-session capture restarts on device changes.
+    private var onAudioLevel: (@Sendable (Float) -> Void)?
 
     var isAvailable: Bool {
         #if canImport(FluidAudio)
@@ -89,8 +91,17 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
             }
         }
 
-        // Set up our own AVAudioEngine to capture mic audio,
-        // compute levels for the waveform, and feed buffers to FluidAudio.
+        self.onAudioLevel = onAudioLevel
+        try startAudioCapture(inputDeviceID: inputDeviceID, streaming: streaming, onAudioLevel: onAudioLevel)
+        #else
+        throw SpeechEngineError.engineUnavailable
+        #endif
+    }
+
+    #if canImport(FluidAudio)
+    /// Set up our own AVAudioEngine to capture mic audio, compute levels
+    /// for the waveform, and feed buffers to FluidAudio.
+    private func startAudioCapture(inputDeviceID: AudioDeviceID?, streaming: StreamingAsrManager, onAudioLevel: @escaping @Sendable (Float) -> Void) throws {
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
@@ -126,8 +137,18 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
 
         engine.prepare()
         try engine.start()
-        #else
-        throw SpeechEngineError.engineUnavailable
+    }
+    #endif
+
+    /// Rebuild capture on the new device; the streaming manager and its
+    /// transcript carry on untouched.
+    func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {
+        #if canImport(FluidAudio)
+        guard isStreamingFlag, let streaming = streamingManager, let onAudioLevel else { return }
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        try? startAudioCapture(inputDeviceID: inputDeviceID, streaming: streaming, onAudioLevel: onAudioLevel)
         #endif
     }
 

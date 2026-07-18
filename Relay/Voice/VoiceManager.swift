@@ -173,6 +173,36 @@ final class VoiceManager: ObservableObject {
         }
     }
 
+    // MARK: - Device change handling
+
+    /// The system default input changed (e.g. AirPods connected). If we're
+    /// recording on the default device, restart capture so it follows.
+    func defaultInputDeviceChanged() {
+        guard isRecording, inputDeviceID == nil else { return }
+        scheduleCaptureRestart()
+    }
+
+    /// The explicitly selected device disappeared mid-recording. AppState has
+    /// already fallen back to system default; move the live capture over too.
+    func captureDeviceDisappeared() {
+        guard isRecording else { return }
+        scheduleCaptureRestart()
+    }
+
+    private var captureRestartTask: Task<Void, Never>?
+
+    /// Restart capture after a short debounce — device hotplug tends to fire
+    /// several CoreAudio notifications in a burst.
+    private func scheduleCaptureRestart() {
+        captureRestartTask?.cancel()
+        let engine = activeEngine
+        captureRestartTask = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, self.isRecording else { return }
+            await engine.restartAudioCapture(inputDeviceID: self.inputDeviceID)
+        }
+    }
+
     private func restoreInputVolume() {
         if let volume = previousInputVolume {
             SystemAudioHelper.setInputVolume(volume, deviceID: inputDeviceID)

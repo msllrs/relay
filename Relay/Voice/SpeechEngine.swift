@@ -26,4 +26,14 @@ protocol SpeechEngine: AnyObject, Sendable {
 
     /// Cancel recording without transcribing. Discards all captured audio.
     func cancel() async
+
+    /// Tear down and rebuild audio capture mid-session (e.g. the input device
+    /// changed or disappeared), preserving the transcription accumulated so far.
+    /// Pass `nil` for `inputDeviceID` to use the system default.
+    func restartAudioCapture(inputDeviceID: AudioDeviceID?) async
+}
+
+extension SpeechEngine {
+    /// Engines that don't support live device switching keep recording as-is.
+    func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {}
 }

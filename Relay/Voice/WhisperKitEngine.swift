@@ -19,6 +19,8 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
     private var audioSamples: [Float] = []
     private var isRecordingFlag = false
     private var transcriptionTask: Task<Void, Never>?
+    /// Kept for mid-session capture restarts on device changes.
+    private var onAudioLevel: (@Sendable (Float) -> Void)?
 
     var isAvailable: Bool {
         #if canImport(WhisperKit)
@@ -56,8 +58,43 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
 
         audioSamples = []
         isRecordingFlag = true
+        self.onAudioLevel = onAudioLevel
 
-        // Set up our own AVAudioEngine to capture mic audio
+        try startAudioCapture(inputDeviceID: inputDeviceID, onAudioLevel: onAudioLevel)
+
+        // Periodic transcription loop in background
+        let kit = whisperKit
+        transcriptionTask = Task.detached { [weak self] in
+            let options = DecodingOptions(language: "en", skipSpecialTokens: true, withoutTimestamps: true)
+            while self?.isRecordingFlag == true {
+                try? await Task.sleep(nanoseconds: 1_500_000_000) // every 1.5s
+                guard let self = self, self.isRecordingFlag else { break }
+
+                let currentSamples = self.audioSamples
+                guard Float(currentSamples.count) / 16000.0 > 1.0 else { continue }
+
+                let results: [TranscriptionResult]? = try? await kit.transcribe(
+                    audioArray: currentSamples,
+                    decodeOptions: options
+                )
+                if let results {
+                    let text = results.flatMap(\.segments).map(\.text).joined(separator: " ")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        onPartialResult(text)
+                    }
+                }
+            }
+        }
+        #else
+        throw SpeechEngineError.engineUnavailable
+        #endif
+    }
+
+    /// Build a fresh AVAudioEngine + 16 kHz converter for the current device
+    /// and append converted samples to `audioSamples`. Rebuilt per (re)start
+    /// because the hardware sample rate differs between devices.
+    private func startAudioCapture(inputDeviceID: AudioDeviceID?, onAudioLevel: @escaping @Sendable (Float) -> Void) throws {
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
@@ -123,34 +160,16 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
 
         engine.prepare()
         try engine.start()
+    }
 
-        // Periodic transcription loop in background
-        let kit = whisperKit
-        transcriptionTask = Task.detached { [weak self] in
-            let options = DecodingOptions(language: "en", skipSpecialTokens: true, withoutTimestamps: true)
-            while self?.isRecordingFlag == true {
-                try? await Task.sleep(nanoseconds: 1_500_000_000) // every 1.5s
-                guard let self = self, self.isRecordingFlag else { break }
-
-                let currentSamples = self.audioSamples
-                guard Float(currentSamples.count) / 16000.0 > 1.0 else { continue }
-
-                let results: [TranscriptionResult]? = try? await kit.transcribe(
-                    audioArray: currentSamples,
-                    decodeOptions: options
-                )
-                if let results {
-                    let text = results.flatMap(\.segments).map(\.text).joined(separator: " ")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !text.isEmpty {
-                        onPartialResult(text)
-                    }
-                }
-            }
-        }
-        #else
-        throw SpeechEngineError.engineUnavailable
-        #endif
+    /// Rebuild capture on the new device; accumulated samples and the
+    /// transcription loop carry on untouched.
+    func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {
+        guard isRecordingFlag, let onAudioLevel else { return }
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        try? startAudioCapture(inputDeviceID: inputDeviceID, onAudioLevel: onAudioLevel)
     }
 
     func stopAndTranscribe() async throws -> String {

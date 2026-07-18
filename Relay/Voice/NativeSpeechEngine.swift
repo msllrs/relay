@@ -11,6 +11,8 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     private var audioEngine: AVAudioEngine?
     private let transcription = Mutex("")
     private var completionContinuation: CheckedContinuation<String, any Error>?
+    /// Kept for mid-session capture restarts on device changes.
+    private var onAudioLevel: (@Sendable (Float) -> Void)?
 
     var isAvailable: Bool {
         guard let recognizer = speechRecognizer else { return false }
@@ -53,9 +55,38 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         request.addsPunctuation = true
 
         self.recognitionRequest = request
+        self.onAudioLevel = onAudioLevel
         transcription.withLock { $0 = "" }
 
-        // Fresh engine each session so it picks up the current default input device
+        try startAudioCapture(inputDeviceID: inputDeviceID, request: request, onAudioLevel: onAudioLevel)
+
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
+            if let result {
+                let text = result.bestTranscription.formattedString
+                self.transcription.withLock { $0 = text }
+                onPartialResult(text)
+
+                if result.isFinal {
+                    self.completionContinuation?.resume(returning: text)
+                    self.completionContinuation = nil
+                }
+            }
+            if let error, self.completionContinuation != nil {
+                let current = self.transcription.withLock { $0 }
+                if current.isEmpty {
+                    self.completionContinuation?.resume(throwing: SpeechEngineError.transcriptionFailed(error.localizedDescription))
+                } else {
+                    self.completionContinuation?.resume(returning: current)
+                }
+                self.completionContinuation = nil
+            }
+        }
+    }
+
+    /// Build a fresh AVAudioEngine and tap feeding the given recognition request.
+    /// Fresh engine each (re)start so it binds the current default input device.
+    private func startAudioCapture(inputDeviceID: AudioDeviceID?, request: SFSpeechAudioBufferRecognitionRequest, onAudioLevel: @escaping @Sendable (Float) -> Void) throws {
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
@@ -90,29 +121,16 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
 
         engine.prepare()
         try engine.start()
+    }
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-            if let result {
-                let text = result.bestTranscription.formattedString
-                self.transcription.withLock { $0 = text }
-                onPartialResult(text)
-
-                if result.isFinal {
-                    self.completionContinuation?.resume(returning: text)
-                    self.completionContinuation = nil
-                }
-            }
-            if let error, self.completionContinuation != nil {
-                let current = self.transcription.withLock { $0 }
-                if current.isEmpty {
-                    self.completionContinuation?.resume(throwing: SpeechEngineError.transcriptionFailed(error.localizedDescription))
-                } else {
-                    self.completionContinuation?.resume(returning: current)
-                }
-                self.completionContinuation = nil
-            }
-        }
+    /// Rebuild the audio engine on the new device, keeping the recognition
+    /// request (and therefore the transcript so far) alive.
+    func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {
+        guard let request = recognitionRequest, let onAudioLevel else { return }
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        try? startAudioCapture(inputDeviceID: inputDeviceID, request: request, onAudioLevel: onAudioLevel)
     }
 
     func stopAndTranscribe() async throws -> String {
