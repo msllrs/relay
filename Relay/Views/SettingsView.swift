@@ -2,13 +2,27 @@ import SwiftUI
 
 // MARK: - Settings Page
 
+private struct SettingsScrollEdges: Equatable {
+    var canScrollUp: Bool
+    var canScrollDown: Bool
+}
+
 struct SettingsPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
     @ObservedObject var voiceManager: VoiceManager
     @ObservedObject var updaterManager: UpdaterManager
+    @State private var canScrollUp = false
+    @State private var canScrollDown = false
 
     private static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+
+    /// Cap the sections scroll area so a growing settings list doesn't push the
+    /// popover off screen. The footer stays pinned below the scroll area.
+    private var maxScrollHeight: CGFloat {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
+        return min(560, screenHeight * 0.85 - 160)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,18 +44,50 @@ struct SettingsPage: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
-            VStack(alignment: .leading, spacing: 8) {
-                voiceSection
-                behaviorSection
-                afterDictationSection
-                promptSection
-                integrationSection
-                annotationSection
-                shortcutSection
-                footerSection
+            // Sections scroll once they exceed the max height; sized to content
+            // below that so the popover height morph keeps working.
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 8) {
+                    voiceSection
+                    behaviorSection
+                    afterDictationSection
+                    promptSection
+                    integrationSection
+                    annotationSection
+                    shortcutSection
+                }
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .onScrollGeometryChange(for: SettingsScrollEdges.self) { geo in
+                let overflow = geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height
+                return SettingsScrollEdges(
+                    canScrollUp: geo.contentOffset.y > 5,
+                    canScrollDown: overflow > 5
+                )
+            } action: { _, edges in
+                canScrollUp = edges.canScrollUp
+                canScrollDown = edges.canScrollDown
+            }
+            .mask {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: canScrollUp ? 24 : 0)
+                    Rectangle().fill(.black)
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: canScrollDown ? 24 : 0)
+                }
+                .animation(.easeOut(duration: 0.12), value: canScrollUp)
+                .animation(.easeOut(duration: 0.12), value: canScrollDown)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: maxScrollHeight)
+            .fixedSize(horizontal: false, vertical: true)
+
+            // Footer pinned below the scroll area
+            footerSection
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
         }
         .onChange(of: showSettings) {
             if showSettings {
