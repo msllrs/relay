@@ -13,13 +13,45 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 ## Features
 
 - **Clipboard capture** — Automatically collects what you copy with content type detection (code, URL, terminal, JSON, text)
+- **Screen annotations** — Hold a shortcut and draw directly on your screen. Relay recognizes the gesture — circle, X, arrow, or highlight — captures the marked region, and attaches the intent ("focus here", "remove this", "points to this") so the LLM knows what you meant. Draw mid-dictation and the annotation lands inline with your words; committed marks melt away in a puff of smoke
 - **Screenshots, files, and folders** — Drag and drop images, files, or entire folders to add them as context
-- **Voice notes** — Record and transcribe with native macOS speech recognition, WhisperKit, or Parakeet
-- **Recording overlay** — A draggable floating indicator that shows live audio levels, flashes on new clipboard captures, and doubles as a stop button
+- **Voice notes** — Record and transcribe with native macOS speech recognition, WhisperKit, or Parakeet; pick a specific input device or follow the system default, with seamless mid-recording handoff when devices connect or disconnect
+- **Recording overlay** — A draggable floating indicator that springs out of the menu bar, shows live audio levels, flashes on new clipboard captures, and doubles as a stop button
+- **Claude Code integration** — An MCP bridge exposes your context stack directly to Claude Code (`relay_get_context` and friends), so agents can pull what you've collected without any copy-paste
 - **Prompt composition** — Generates structured prompts in Markdown format, with an option to switch to XML
 - **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation
 - **Transcript cleanup** — Three modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), and Formatted (clean + capitalization, deduplication, punctuation)
-- **Global hotkey** — Customizable keyboard shortcut for recording and composing
+- **Global hotkeys** — Customizable keyboard shortcuts for recording and annotation
+
+## Annotations
+
+Hold the annotation shortcut (default `⌘⇧A`) and draw on your screen; release to capture. What you draw sets the intent attached to the image:
+
+| Gesture | Meaning |
+| --- | --- |
+| Circle / lasso | Focus here — this is the relevant element |
+| X | Delete or remove this |
+| Arrow | Points to this — a direction, move, or relationship |
+| Anything else | Highlighted region |
+
+Multi-stroke gestures work naturally — an arrow drawn as shaft-then-head, an X as two lines — and capture can crop to the mark or grab the full screen (Settings → Annotation). With "Annotate while recording" on, marks land inline with your dictation as you speak. Annotations require the Screen Recording permission.
+
+## Claude Code integration
+
+Enable **Settings → Integration → MCP bridge for Claude Code**, then register the bundled MCP server in your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "relay": {
+      "command": "node",
+      "args": ["/path/to/relay/relay-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Claude Code can then pull your context directly: `relay_get_context` (the composed prompt), `relay_get_stack` (the raw item stack), `relay_get_status` (recording state), and `relay_stop_and_get_context` (finish dictation and fetch in one step).
 
 ## Install
 
