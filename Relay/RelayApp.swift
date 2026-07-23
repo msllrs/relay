@@ -108,6 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             })
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            appState.handleURLCommand(url)
+        }
+    }
+
     @objc private func togglePopover() {
         if popover.isShown {
             popover.close()

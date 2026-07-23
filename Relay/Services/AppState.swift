@@ -67,6 +67,10 @@ final class AppState: ObservableObject {
         }
     }
     private var mcpBridgeWriter: MCPBridgeWriter?
+    /// Opt-in: allow relay:// URL commands (used by Siri Shortcuts) to control recording.
+    @Published var siriActivationEnabled: Bool {
+        didSet { UserDefaults.standard.set(siriActivationEnabled, forKey: "siriActivationEnabled") }
+    }
     @Published var annotationEnabled: Bool {
         didSet { UserDefaults.standard.set(annotationEnabled, forKey: "annotationEnabled") }
     }
@@ -173,6 +177,7 @@ final class AppState: ObservableObject {
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
         self.mcpBridgeEnabled = UserDefaults.standard.bool(forKey: "mcpBridgeEnabled")
+        self.siriActivationEnabled = UserDefaults.standard.bool(forKey: "siriActivationEnabled")
         self.annotationEnabled = UserDefaults.standard.bool(forKey: "annotationEnabled")
         if UserDefaults.standard.object(forKey: "annotateWhileRecording") == nil {
             self.annotateWhileRecording = true
@@ -430,30 +435,64 @@ final class AppState: ObservableObject {
             // Already recording → stop, save transcription, stop monitoring
             finishDictationAndStop()
         } else if hotkeyStartsDictation && !isMonitoring {
-            // Start monitoring + begin dictation
-            startMonitoring()
-            pendingRefs = []
-            transcriptionTrimOffset = 0
-            recordingStartTime = Date()
-            // Reserve a placeholder in the stack so the voice note keeps its position
-            let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
-            activeVoiceNoteID = placeholder.id
-            stack.add(placeholder)
-            voiceManager.startRecording()
-            // Install Esc monitor to cancel
-            hotkeyManager?.startEscMonitor { [weak self] in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    self?.cancelDictation()
-                }
-            }
-            // Install keyUp monitor for push-to-talk
-            if pushToTalk {
-                hotkeyManager?.startKeyUpMonitor { [weak self] in
-                    self?.finishDictationAndStop()
-                }
-            }
+            startDictation()
         } else {
             toggleMonitoring()
+        }
+    }
+
+    /// Start monitoring and begin a dictation session. Shared by the hotkey
+    /// path and external triggers (relay:// URL commands).
+    /// - Parameter installPushToTalkMonitor: push-to-talk only makes sense when
+    ///   a key is physically held, so URL-triggered sessions pass false.
+    func startDictation(installPushToTalkMonitor: Bool = true) {
+        if !isMonitoring {
+            startMonitoring()
+        }
+        pendingRefs = []
+        transcriptionTrimOffset = 0
+        recordingStartTime = Date()
+        // Reserve a placeholder in the stack so the voice note keeps its position
+        let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
+        activeVoiceNoteID = placeholder.id
+        stack.add(placeholder)
+        voiceManager.startRecording()
+        // Install Esc monitor to cancel
+        hotkeyManager?.startEscMonitor { [weak self] in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self?.cancelDictation()
+            }
+        }
+        // Install keyUp monitor for push-to-talk
+        if installPushToTalkMonitor && pushToTalk {
+            hotkeyManager?.startKeyUpMonitor { [weak self] in
+                self?.finishDictationAndStop()
+            }
+        }
+    }
+
+    /// Handle a relay:// URL command (Siri Shortcuts, Raycast, scripts).
+    /// Ignored unless the user has opted in via the Siri activation setting.
+    func handleURLCommand(_ url: URL) {
+        guard siriActivationEnabled else {
+            NSLog("Ignoring URL command %@ — Siri activation is disabled in settings", url.absoluteString)
+            return
+        }
+        switch url.host() {
+        case "start-recording":
+            guard !voiceManager.isRecording else { return }
+            startDictation(installPushToTalkMonitor: false)
+        case "stop-recording":
+            guard voiceManager.isRecording else { return }
+            finishDictationAndStop()
+        case "toggle-recording":
+            if voiceManager.isRecording {
+                finishDictationAndStop()
+            } else {
+                startDictation(installPushToTalkMonitor: false)
+            }
+        default:
+            NSLog("Unknown URL command: %@", url.absoluteString)
         }
     }
 

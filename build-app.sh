@@ -27,9 +27,13 @@ BUILD_NUMBER=$(git rev-list --count HEAD)
 if [ "$CONFIG" = "debug" ]; then
     BUNDLE_ID="com.msllrs.relay.dev"
     DISPLAY_NAME="Relay Dev"
+    # Separate scheme so dev-build testing can't hijack relay:// links aimed at
+    # the production install (LaunchServices routes a scheme to one app only).
+    URL_SCHEME="relay-dev"
 else
     BUNDLE_ID="com.msllrs.relay"
     DISPLAY_NAME="Relay"
+    URL_SCHEME="relay"
 fi
 
 echo "Building Relay v${VERSION} (build ${BUILD_NUMBER}) [${CONFIG}] id=${BUNDLE_ID}..."
@@ -80,6 +84,17 @@ cat > "$APP_DIR/Info.plist" << PLIST
 	<string>APPL</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>${BUNDLE_ID}</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>${URL_SCHEME}</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Relay uses on-device speech recognition to transcribe voice notes. No audio data is sent to Apple.</string>
 	<key>NSMicrophoneUsageDescription</key>
