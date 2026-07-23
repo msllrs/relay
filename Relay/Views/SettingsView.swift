@@ -190,6 +190,12 @@ struct SettingsPage: View {
     private var integrationSection: some View {
         SettingsSection("Integration") {
             SettingsToggle("MCP bridge for Claude Code", isOn: $appState.mcpBridgeEnabled)
+
+            SettingsToggle("Siri voice activation", isOn: $appState.siriActivationEnabled)
+
+            if appState.siriActivationEnabled {
+                SiriSetupHint()
+            }
         }
     }
 
@@ -418,6 +424,37 @@ private struct ShortcutRecorderButton: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Siri Setup Hint
+
+/// One-time setup instructions shown when Siri voice activation is enabled.
+/// Dev builds register the relay-dev:// scheme, so derive it from the bundle ID
+/// to keep the instructions accurate for whichever build is running.
+private struct SiriSetupHint: View {
+    private static var urlScheme: String {
+        Bundle.main.bundleIdentifier == "com.msllrs.relay.dev" ? "relay-dev" : "relay"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("In Shortcuts, create a shortcut named \u{201C}Start Relay\u{201D} with the \u{201C}Open URLs\u{201D} action pointing at \(Self.urlScheme)://start-recording — then say \u{201C}Hey Siri, Start Relay\u{201D}. Use \(Self.urlScheme)://stop-recording to finish hands-free.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Open Shortcuts") {
+                if let url = URL(string: "shortcuts://") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .font(.system(size: 11))
+            .controlSize(.small)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
