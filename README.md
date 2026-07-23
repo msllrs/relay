@@ -22,6 +22,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 - **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation
 - **Transcript cleanup** — Three modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), and Formatted (clean + capitalization, deduplication, punctuation)
 - **Global hotkeys** — Customizable keyboard shortcuts for recording and annotation
+- **Siri voice activation** — Opt-in `relay://` URL commands let Siri Shortcuts (or Raycast, scripts, anything that opens URLs) start and stop recording hands-free
 
 ## Annotations
 
@@ -52,6 +53,20 @@ Enable **Settings → Integration → MCP bridge for Claude Code**, then registe
 ```
 
 Claude Code can then pull your context directly: `relay_get_context` (the composed prompt), `relay_get_stack` (the raw item stack), `relay_get_status` (recording state), and `relay_stop_and_get_context` (finish dictation and fetch in one step).
+
+## Siri voice activation
+
+Enable **Settings → Integration → Siri voice activation**, then create a Shortcut in the Shortcuts app named "Start Relay" with a single **Open URLs** action pointing at `relay://start-recording`. Say "Hey Siri, Start Relay" and dictation begins.
+
+Available commands (all ignored unless the setting is on):
+
+| URL | Action |
+| --- | --- |
+| `relay://start-recording` | Start monitoring + dictation (no-op if already recording) |
+| `relay://stop-recording` | Finish dictation and save the transcription |
+| `relay://toggle-recording` | Start or stop, whichever applies |
+
+The same URLs work from Raycast, Alfred, `open` in a terminal, or any automation tool.
 
 ## Install
 
