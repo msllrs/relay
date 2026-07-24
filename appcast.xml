@@ -3,6 +3,27 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.5.0</title>
+            <pubDate>Fri, 24 Jul 2026 21:11:00 +0000</pubDate>
+            <sparkle:version>169</sparkle:version>
+            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## New
+
+- Launch at login
+- Show in Dock (opt-in)
+- Start recording on menu bar click (opt-in)
+- Hold ⇧ to send after paste (opt-in)
+
+## Fixes
+
+- Auto-paste to focused input now works reliably — text is inserted directly via the Accessibility API with ⌘V as fallback, into the app you were working in
+- Permission prompts for accessibility and event posting instead of silent failures
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.5.0/Relay-v0.5.0.zip" length="5571695" type="application/octet-stream" sparkle:edSignature="HWh3jf1PvjjRAV5+o6j5S/5zoHr/tw63KgYDFTaXk13lYv4irkuLX29hcteeVTa3b3hUrJICijlZ+xEtnXroAQ=="/>
+        </item>
+        <item>
             <title>0.4.0</title>
             <pubDate>Wed, 08 Apr 2026 15:53:10 +0000</pubDate>
             <sparkle:version>126</sparkle:version>
