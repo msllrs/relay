@@ -38,6 +38,19 @@ final class AppState: ObservableObject {
     @Published var showRecordingOverlay: Bool {
         didSet { UserDefaults.standard.set(showRecordingOverlay, forKey: "showRecordingOverlay") }
     }
+    /// Opt-in: show Relay in the Dock and app switcher. Off means menu bar only
+    /// (the LSUIElement default).
+    @Published var showInDock: Bool {
+        didSet {
+            UserDefaults.standard.set(showInDock, forKey: "showInDock")
+            applyDockVisibility()
+        }
+    }
+    /// Opt-in: left-clicking the menu bar icon starts/stops recording instead of
+    /// opening the popover (right-click still opens it).
+    @Published var startRecordingOnMenubarClick: Bool {
+        didSet { UserDefaults.standard.set(startRecordingOnMenubarClick, forKey: "startRecordingOnMenubarClick") }
+    }
     @Published var promptFormat: PromptFormat {
         didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
     }
@@ -91,6 +104,18 @@ final class AppState: ObservableObject {
     @Published var accessibilityBroken = false
     @Published var accessibilityNotGranted = false
     @Published var needsScreenRecordingPermission = false
+
+    /// Sync the activation policy with the Show in Dock setting. LSUIElement
+    /// already makes the app accessory at launch, so this only matters when the
+    /// user has opted in or toggles the setting.
+    func applyDockVisibility() {
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+        // Dropping back to accessory deactivates the app, which would close the
+        // transient settings popover mid-toggle — re-activate to keep it open.
+        if !showInDock {
+            NSApp.activate()
+        }
+    }
 
     /// Re-check AXIsProcessTrusted() and update the published flag.
     /// Call this when the settings view appears so the banner clears
@@ -163,6 +188,8 @@ final class AppState: ObservableObject {
         }
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
         self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
+        self.showInDock = UserDefaults.standard.bool(forKey: "showInDock")
+        self.startRecordingOnMenubarClick = UserDefaults.standard.bool(forKey: "startRecordingOnMenubarClick")
         if UserDefaults.standard.object(forKey: "showRecordingOverlay") == nil {
             self.showRecordingOverlay = true
         } else {

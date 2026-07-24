@@ -42,12 +42,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var overlayController: RecordingOverlayController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // didSet observers don't fire during AppState.init, so apply the
+        // persisted Show in Dock choice here. Skip the default (accessory)
+        // case — LSUIElement already handles it.
+        if appState.showInDock {
+            appState.applyDockVisibility()
+        }
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
             button.image = MenuBarIconBuilder.buildIcon(state: .normal)
             button.action = #selector(togglePopover)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
             let dropView = StatusItemDropView(
                 appState: appState,
@@ -115,6 +123,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func togglePopover() {
+        // Opt-in: left-click toggles recording; right-click keeps opening the
+        // popover. When the popover is already open, a click just closes it so
+        // dismissing the panel can't accidentally start a recording.
+        if appState.startRecordingOnMenubarClick,
+           NSApp.currentEvent?.type != .rightMouseUp,
+           !popover.isShown {
+            if appState.voiceManager.isRecording {
+                appState.finishDictationAndStop()
+            } else {
+                appState.startDictation(installPushToTalkMonitor: false)
+            }
+            return
+        }
+
         if popover.isShown {
             popover.close()
         } else {

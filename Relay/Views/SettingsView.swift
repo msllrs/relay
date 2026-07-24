@@ -22,6 +22,7 @@ struct SettingsPage: View {
         VStack(alignment: .leading, spacing: 8) {
             voiceSection
             behaviorSection
+            applicationSection
             afterDictationSection
             promptSection
             integrationSection
@@ -153,6 +154,13 @@ struct SettingsPage: View {
             SettingsToggle("Keep popover pinned", isOn: $appState.pinPopover)
             SettingsToggle("Show recording overlay", isOn: $appState.showRecordingOverlay)
             SettingsToggle("Clear after copying", isOn: $appState.clearStackOnCopy)
+        }
+    }
+
+    private var applicationSection: some View {
+        SettingsSection("Application") {
+            SettingsToggle("Show in Dock", isOn: $appState.showInDock)
+            SettingsToggle("Start recording on menu bar click", isOn: $appState.startRecordingOnMenubarClick)
         }
     }
 
