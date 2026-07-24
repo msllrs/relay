@@ -17,6 +17,21 @@ struct SettingsPage: View {
 
     private static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
 
+    /// The scrollable sections, shared by the scroller and its blurred twins.
+    private var sectionsContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            voiceSection
+            behaviorSection
+            afterDictationSection
+            promptSection
+            integrationSection
+            annotationSection
+            shortcutSection
+        }
+        .padding(.horizontal, 16)
+    }
+
+
     /// Cap the sections scroll area so a growing settings list doesn't push the
     /// popover off screen. The footer stays pinned below the scroll area.
     private var maxScrollHeight: CGFloat {
@@ -47,16 +62,7 @@ struct SettingsPage: View {
             // Sections scroll once they exceed the max height; sized to content
             // below that so the popover height morph keeps working.
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 8) {
-                    voiceSection
-                    behaviorSection
-                    afterDictationSection
-                    promptSection
-                    integrationSection
-                    annotationSection
-                    shortcutSection
-                }
-                .padding(.horizontal, 16)
+                sectionsContent
             }
             .onScrollGeometryChange(for: SettingsScrollEdges.self) { geo in
                 let overflow = geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height
@@ -68,13 +74,20 @@ struct SettingsPage: View {
                 canScrollUp = edges.canScrollUp
                 canScrollDown = edges.canScrollDown
             }
+            // Tall, soft edge fades. A true progressive BLUR here is not
+            // achievable with public APIs — every approach fails inside an
+            // NSPopover with AppKit-backed controls: SwiftUI Material samples
+            // behind the window, NSVisualEffectView can't backdrop-sample
+            // SwiftUI siblings, .blur()/.clipped() don't apply to platform
+            // views (compositor corruption), and cacheDisplay snapshots break
+            // the popover's vibrancy. Verified 2026-07-20; don't retry.
             .mask {
                 VStack(spacing: 0) {
                     LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: canScrollUp ? 24 : 0)
+                        .frame(height: canScrollUp ? 36 : 0)
                     Rectangle().fill(.black)
                     LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: canScrollDown ? 24 : 0)
+                        .frame(height: canScrollDown ? 36 : 0)
                 }
                 .animation(.easeOut(duration: 0.12), value: canScrollUp)
                 .animation(.easeOut(duration: 0.12), value: canScrollDown)
@@ -83,10 +96,10 @@ struct SettingsPage: View {
             .frame(maxHeight: maxScrollHeight)
             .fixedSize(horizontal: false, vertical: true)
 
-            // Footer pinned below the scroll area
+            // Footer pinned below the scroll area — no top padding, so the
+            // bottom edge blur hugs the footer divider.
             footerSection
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
                 .padding(.bottom, 16)
         }
         .onChange(of: showSettings) {
@@ -240,7 +253,7 @@ struct SettingsPage: View {
 
     private var shortcutSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Divider()
+            SettingsDivider()
             SettingsRow("Keyboard shortcut") {
                 ShortcutRecorderButton()
             }
@@ -254,7 +267,7 @@ struct SettingsPage: View {
 
     private var footerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Divider()
+            SettingsDivider()
 
             HStack(spacing: 4) {
                 if let version = Self.appVersion {
@@ -289,6 +302,20 @@ struct SettingsPage: View {
     }
 }
 
+// MARK: - Settings Divider
+
+/// Explicit hairline matching the main page footer's rule. `Divider()` inside
+/// the popover sometimes resolves its separator color against the wrong
+/// appearance (showing dark-mode color in light mode and vice versa); a fixed
+/// mid-gray at low opacity reads correctly in both.
+private struct SettingsDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color(white: 0.624).opacity(0.14))
+            .frame(height: 1)
+    }
+}
+
 // MARK: - Settings Section
 
 private struct SettingsSection<Content: View>: View {
@@ -302,7 +329,7 @@ private struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Divider()
+            SettingsDivider()
 
             Text(title)
                 .font(.caption)
