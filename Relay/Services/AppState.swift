@@ -30,7 +30,12 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(autoCopy, forKey: "autoCopy") }
     }
     @Published var autoPasteAfterCopy: Bool {
-        didSet { UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy") }
+        didSet {
+            UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy")
+            if autoPasteAfterCopy && !AXIsProcessTrusted() {
+                promptForAccessibility()
+            }
+        }
     }
     @Published var pinPopover: Bool {
         didSet { UserDefaults.standard.set(pinPopover, forKey: "pinPopover") }
@@ -117,6 +122,16 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Request accessibility with the system prompt. Unlike manually adding the
+    /// app in System Settings, this registers a proper TCC entry for the app's
+    /// current code signature.
+    func promptForAccessibility() {
+        // Literal key instead of kAXTrustedCheckOptionPrompt — the global var
+        // isn't concurrency-safe under Swift 6 strict checking.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        AXIsProcessTrustedWithOptions(options)
+    }
+
     /// Re-check AXIsProcessTrusted() and update the published flag.
     /// Call this when the settings view appears so the banner clears
     /// promptly after the user grants permission.
@@ -168,6 +183,11 @@ final class AppState: ObservableObject {
 
     /// The change count to ignore (set after we write to the pasteboard)
     var lastWrittenChangeCount: Int?
+
+    /// Last frontmost app other than Relay — the auto-paste target.
+    /// `NSApp.deactivate()` alone doesn't reliably restore focus (popover,
+    /// Siri/URL activation), so we re-activate this app explicitly.
+    private var lastExternalApp: NSRunningApplication?
 
     init() {
         self.clearStackOnCopy = UserDefaults.standard.bool(forKey: "clearStackOnCopy")
@@ -232,6 +252,24 @@ final class AppState: ObservableObject {
             self?.voiceManager.defaultInputDeviceChanged()
         }
         audioDeviceMonitor.start()
+
+        // Track the frontmost non-Relay app so auto-paste can hand focus back
+        // to it. Observer lives for the app's lifetime (AppState never deallocates).
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.bundleIdentifier != Bundle.main.bundleIdentifier {
+            lastExternalApp = frontmost
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+            MainActor.assumeIsolated {
+                self.lastExternalApp = app
+            }
+        }
 
         clipboardMonitor = ClipboardMonitor(appState: self)
         hotkeyManager = HotkeyManager(appState: self)
@@ -777,14 +815,55 @@ final class AppState: ObservableObject {
             copyPromptToClipboard()
         }
 
-        if autoCopy && autoPasteAfterCopy && AXIsProcessTrusted() {
-            // Deactivate Relay so focus returns to the previous app before pasting
+        if autoCopy && autoPasteAfterCopy {
+            if AXIsProcessTrusted() {
+                autoPasteToFocusedInput()
+            } else {
+                // Surface the missing permission instead of skipping silently —
+                // the settings banner explains why nothing pasted.
+                accessibilityNotGranted = true
+            }
+        }
+    }
+
+    /// Insert text by replacing the focused element's selection via the
+    /// Accessibility API — superwhisper's primary technique. No clipboard or
+    /// keystroke involved. Returns false when the focused element rejects
+    /// AXSelectedText writes (some Electron apps and web views).
+    private static func insertTextViaAccessibility(_ text: String) -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef, CFGetTypeID(focused) == AXUIElementGetTypeID() else {
+            return false
+        }
+        let element = focused as! AXUIElement
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
+              settable.boolValue else {
+            return false
+        }
+        return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
+    }
+
+    /// Hand focus back to the previously focused app, then insert the clipboard
+    /// text into its focused input — direct AX insertion first, ⌘V fallback.
+    private func autoPasteToFocusedInput() {
+        // Re-activate the last external app explicitly — `deactivate()` alone
+        // doesn't restore focus when recording was stopped from the popover or
+        // Relay was activated by a Siri/URL command.
+        if let target = lastExternalApp, !target.isTerminated {
+            target.activate()
+        } else {
             NSApp.deactivate()
-            Task { [weak self] in
-                // Wait for focus to return to the previous app
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-                self?.simulatePaste()
+        }
+        Task { [weak self] in
+            // Wait for focus to return to the previous app
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, let self else { return }
+            let text = NSPasteboard.general.string(forType: .string) ?? ""
+            if text.isEmpty || !Self.insertTextViaAccessibility(text) {
+                self.simulatePaste()
             }
         }
     }
