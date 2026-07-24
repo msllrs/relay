@@ -30,16 +30,30 @@ if [ "$CONFIG" = "debug" ]; then
     # Separate scheme so dev-build testing can't hijack relay:// links aimed at
     # the production install (LaunchServices routes a scheme to one app only).
     URL_SCHEME="relay-dev"
+    # Inverted-color icon so dev and production are distinguishable in the
+    # Dock, app switcher, and permission lists.
+    ICON_FILE="AppIcon-dev.icns"
+    # Distinct bundle file name too — permission lists (TCC) display the file
+    # name, not CFBundleDisplayName, so "Relay.app" twice is indistinguishable.
+    APP_NAME="Relay Dev.app"
 else
     BUNDLE_ID="com.msllrs.relay"
     DISPLAY_NAME="Relay"
     URL_SCHEME="relay"
+    ICON_FILE="AppIcon.icns"
+    APP_NAME="Relay.app"
 fi
 
 echo "Building Relay v${VERSION} (build ${BUILD_NUMBER}) [${CONFIG}] id=${BUNDLE_ID}..."
 swift build -c "$CONFIG"
 
-APP_DIR=".build/Relay.app/Contents"
+# Debug bundles used to be named Relay.app — remove strays so `open` and
+# LaunchServices can't resolve to a stale copy.
+if [ "$CONFIG" = "debug" ] && [ -d ".build/Relay.app" ]; then
+    rm -rf ".build/Relay.app"
+fi
+
+APP_DIR=".build/${APP_NAME}/Contents"
 mkdir -p "$APP_DIR/MacOS"
 mkdir -p "$APP_DIR/Resources"
 
@@ -51,7 +65,7 @@ if [ -d ".build/${CONFIG}/Relay_Relay.bundle" ]; then
 fi
 
 # Copy app icon
-cp Relay/Resources/AppIcon.icns "$APP_DIR/Resources/AppIcon.icns"
+cp "Relay/Resources/${ICON_FILE}" "$APP_DIR/Resources/AppIcon.icns"
 
 # Embed Sparkle framework
 SPARKLE_FRAMEWORK=$(find .build/artifacts -path "*/Sparkle.framework" -type d 2>/dev/null | head -1)
@@ -126,7 +140,7 @@ ENT
 # Ensure @rpath resolves to the embedded Frameworks directory
 install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/MacOS/Relay" 2>/dev/null || true
 
-APP_BUNDLE=".build/Relay.app"
+APP_BUNDLE=".build/${APP_NAME}"
 
 if $NOTARIZE; then
     echo "Signing with Developer ID..."
@@ -239,4 +253,4 @@ else
 fi
 
 echo "Built $APP_BUNDLE (v${VERSION}, build ${BUILD_NUMBER}, ${CONFIG})"
-echo "Run with: open $APP_BUNDLE"
+echo "Run with: open \"$APP_BUNDLE\""
