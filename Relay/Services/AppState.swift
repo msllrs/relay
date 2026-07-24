@@ -37,6 +37,11 @@ final class AppState: ObservableObject {
             }
         }
     }
+    /// Opt-in: holding ⇧ while the auto-paste lands also presses Return,
+    /// submitting the pasted prompt (e.g. into a chat input).
+    @Published var sendAfterPasteWithShift: Bool {
+        didSet { UserDefaults.standard.set(sendAfterPasteWithShift, forKey: "sendAfterPasteWithShift") }
+    }
     @Published var pinPopover: Bool {
         didSet { UserDefaults.standard.set(pinPopover, forKey: "pinPopover") }
     }
@@ -130,6 +135,12 @@ final class AppState: ObservableObject {
         // isn't concurrency-safe under Swift 6 strict checking.
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
+        // Event posting (the ⌘V fallback and ⇧-send Return) is a separate TCC
+        // gate that can hold a stale silent deny even while accessibility is
+        // granted — request it explicitly.
+        if !CGPreflightPostEventAccess() {
+            _ = CGRequestPostEventAccess()
+        }
     }
 
     /// Re-check AXIsProcessTrusted() and update the published flag.
@@ -207,6 +218,7 @@ final class AppState: ObservableObject {
                 || UserDefaults.standard.bool(forKey: "autoCopyComposedPrompt")
         }
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
+        self.sendAfterPasteWithShift = UserDefaults.standard.bool(forKey: "sendAfterPasteWithShift")
         self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
         self.showInDock = UserDefaults.standard.bool(forKey: "showInDock")
         self.startRecordingOnMenubarClick = UserDefaults.standard.bool(forKey: "startRecordingOnMenubarClick")
@@ -865,7 +877,30 @@ final class AppState: ObservableObject {
             if text.isEmpty || !Self.insertTextViaAccessibility(text) {
                 self.simulatePaste()
             }
+            // Holding ⇧ when the paste lands submits it (opt-in): give the
+            // target a beat to process the insertion, then press Return.
+            // CGEventSource, not NSEvent.modifierFlags — the latter is derived
+            // from the app's own event stream, which is stale while Relay is a
+            // backgrounded menu bar app.
+            if self.sendAfterPasteWithShift,
+               CGEventSource.flagsState(.combinedSessionState).contains(.maskShift) {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+                self.simulateReturn()
+            }
         }
+    }
+
+    private nonisolated func simulateReturn() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x24, keyDown: false)
+        // Clear flags so the physically held ⇧ doesn't turn this into
+        // Shift+Return — a newline instead of a send in most chat inputs.
+        keyDown?.flags = []
+        keyUp?.flags = []
+        keyDown?.post(tap: .cgSessionEventTap)
+        keyUp?.post(tap: .cgSessionEventTap)
     }
 
     /// Record a reference marker for a clipboard item captured during dictation.

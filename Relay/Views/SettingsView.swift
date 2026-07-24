@@ -170,6 +170,10 @@ struct SettingsPage: View {
 
             if appState.autoCopy {
                 SettingsToggle("Auto-paste to focused input", isOn: $appState.autoPasteAfterCopy)
+
+                if appState.autoPasteAfterCopy {
+                    SettingsToggle("Hold ⇧ to send after paste", isOn: $appState.sendAfterPasteWithShift)
+                }
             }
         }
     }
