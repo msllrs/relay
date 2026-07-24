@@ -145,6 +145,10 @@ APP_BUNDLE=".build/${APP_NAME}"
 if $NOTARIZE; then
     echo "Signing with Developer ID..."
 
+    # Strip extended attributes first (same as the dev branch) — leftover
+    # resource forks make codesign fail with "detritus not allowed".
+    xattr -cr "$APP_BUNDLE"
+
     # Sign Sparkle framework first (inside-out signing)
     if [ -d "$APP_DIR/Frameworks/Sparkle.framework" ]; then
         SPARKLE_DIR="$APP_DIR/Frameworks/Sparkle.framework/Versions/B"
