@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 import SwiftUI
 
 @MainActor
@@ -60,6 +61,25 @@ final class AppState: ObservableObject {
     /// opening the popover (right-click still opens it).
     @Published var startRecordingOnMenubarClick: Bool {
         didSet { UserDefaults.standard.set(startRecordingOnMenubarClick, forKey: "startRecordingOnMenubarClick") }
+    }
+    /// Opt-in: register as a login item. The SMAppService registration is the
+    /// source of truth (visible in System Settings > General > Login Items),
+    /// so this isn't persisted to UserDefaults.
+    @Published var launchAtLogin: Bool {
+        didSet {
+            // Guard against the revert-on-failure below re-entering didSet.
+            guard launchAtLogin != (SMAppService.mainApp.status == .enabled) else { return }
+            do {
+                if launchAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                NSLog("Launch at login toggle failed: %@", error.localizedDescription)
+                launchAtLogin = SMAppService.mainApp.status == .enabled
+            }
+        }
     }
     @Published var promptFormat: PromptFormat {
         didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
@@ -222,6 +242,7 @@ final class AppState: ObservableObject {
         self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
         self.showInDock = UserDefaults.standard.bool(forKey: "showInDock")
         self.startRecordingOnMenubarClick = UserDefaults.standard.bool(forKey: "startRecordingOnMenubarClick")
+        self.launchAtLogin = SMAppService.mainApp.status == .enabled
         if UserDefaults.standard.object(forKey: "showRecordingOverlay") == nil {
             self.showRecordingOverlay = true
         } else {

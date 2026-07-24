@@ -159,6 +159,7 @@ struct SettingsPage: View {
 
     private var applicationSection: some View {
         SettingsSection("Application") {
+            SettingsToggle("Launch at login", isOn: $appState.launchAtLogin)
             SettingsToggle("Show in Dock", isOn: $appState.showInDock)
             SettingsToggle("Start recording on menu bar click", isOn: $appState.startRecordingOnMenubarClick)
         }
