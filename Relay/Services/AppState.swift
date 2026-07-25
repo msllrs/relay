@@ -4,6 +4,17 @@ import Foundation
 import ServiceManagement
 import SwiftUI
 
+/// A line in the rolling capture history shown in settings.
+struct CaptureHistoryEntry: Identifiable, Equatable {
+    let id = UUID()
+    let contentType: ContentType
+    /// Single-line summary for the settings list.
+    let preview: String
+    let textContent: String?
+    let imagePath: String?
+    let timestamp: Date
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var stack = ContextStack()
@@ -139,6 +150,10 @@ final class AppState: ObservableObject {
     @Published var annotationAllowMultiple: Bool {
         didSet { UserDefaults.standard.set(annotationAllowMultiple, forKey: "annotationAllowMultiple") }
     }
+    /// Rolling history of the last 20 captures, newest first. In-memory only —
+    /// clipboard contents can include secrets, so this is deliberately never
+    /// persisted to disk.
+    @Published private(set) var captureHistory: [CaptureHistoryEntry] = []
     @Published var itemJustAdded = false
     @Published var isRecording = false
     /// Which popover page is showing. Lifted here (not view state) so the app
@@ -681,6 +696,7 @@ final class AppState: ObservableObject {
                     level: self.transcriptEnhancement
                 )
                 self.stack.update(id: id, textContent: markedText)
+                self.recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: markedText))
                 self.freezeCurrentSession(markedText)
             } else {
                 let markedText = TranscriptEnhancer.enhance(
@@ -689,6 +705,7 @@ final class AppState: ObservableObject {
                 )
                 let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
                 self.stack.add(item)
+                self.recordInHistory(item)
                 self.freezeCurrentSession(markedText)
             }
         }
@@ -817,6 +834,45 @@ final class AppState: ObservableObject {
         }
         recordRefMarker(for: item.id)
         notifyItemAdded()
+        recordInHistory(item)
+    }
+
+    /// Append a capture to the rolling history (newest first, capped at 20).
+    private func recordInHistory(_ item: ClipboardItem) {
+        let trimmed = item.textContent?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview: String
+        if let trimmed, !trimmed.isEmpty {
+            let firstLine = trimmed.split(whereSeparator: \.isNewline).first.map(String.init) ?? trimmed
+            preview = String(firstLine.prefix(100))
+        } else if let path = item.imagePath {
+            preview = "Image — \((path as NSString).lastPathComponent)"
+        } else {
+            return
+        }
+        let entry = CaptureHistoryEntry(
+            contentType: item.contentType,
+            preview: preview,
+            textContent: item.textContent,
+            imagePath: item.imagePath,
+            timestamp: item.timestamp
+        )
+        captureHistory.insert(entry, at: 0)
+        if captureHistory.count > 20 {
+            captureHistory.removeLast(captureHistory.count - 20)
+        }
+    }
+
+    /// Copy a history entry back to the clipboard.
+    func copyHistoryEntry(_ entry: CaptureHistoryEntry) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        if let path = entry.imagePath, let image = NSImage(contentsOfFile: path) {
+            pasteboard.writeObjects([image])
+        } else if let text = entry.textContent {
+            pasteboard.setString(text, forType: .string)
+        }
+        // Skip the monitor's next poll so the copy doesn't re-capture itself
+        lastWrittenChangeCount = pasteboard.changeCount
     }
 
 #if DEBUG

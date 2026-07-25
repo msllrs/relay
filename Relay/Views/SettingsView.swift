@@ -27,6 +27,7 @@ struct SettingsPage: View {
             promptSection
             integrationSection
             annotationSection
+            historySection
             shortcutSection
         }
         .padding(.horizontal, 16)
@@ -266,6 +267,12 @@ struct SettingsPage: View {
         }
     }
 
+    private var historySection: some View {
+        SettingsSection("History") {
+            CaptureHistoryList()
+        }
+    }
+
     private var shortcutSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             SettingsDivider()
@@ -395,6 +402,98 @@ private struct SettingsToggle: View {
                 .controlSize(.mini)
                 .labelsHidden()
         }
+    }
+}
+
+// MARK: - Capture History
+
+/// Disclosure list of recent captures; clicking a row copies it back to the
+/// clipboard.
+private struct CaptureHistoryList: View {
+    @EnvironmentObject var appState: AppState
+    @State private var expanded = false
+    @State private var copiedID: UUID?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack {
+                    Text("Recent captures")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Text("\(appState.captureHistory.count)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: 24)
+
+            if expanded {
+                if appState.captureHistory.isEmpty {
+                    Text("Nothing captured yet")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.bottom, 4)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(appState.captureHistory) { entry in
+                            CaptureHistoryRow(entry: entry, copied: copiedID == entry.id) {
+                                appState.copyHistoryEntry(entry)
+                                copiedID = entry.id
+                                Task {
+                                    try? await Task.sleep(for: .seconds(1.2))
+                                    if copiedID == entry.id { copiedID = nil }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 4)
+                }
+            }
+        }
+    }
+}
+
+private struct CaptureHistoryRow: View {
+    let entry: CaptureHistoryEntry
+    let copied: Bool
+    let onCopy: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: onCopy) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(entry.contentType.chipColor)
+                    .frame(width: 5, height: 5)
+                Text(entry.preview)
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(hovered ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                Spacer(minLength: 4)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(successGreen)
+                    .opacity(copied ? 1 : 0)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(hovered ? Color.primary.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .help("Click to copy")
+        .animation(.easeInOut(duration: 0.15), value: copied)
     }
 }
 
