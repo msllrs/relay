@@ -42,10 +42,7 @@ struct MenuBarPopover: View {
         }
         .frame(width: 360)
         .clipped()
-        .animation(.easeInOut(duration: 0.25), value: showSettings)
-        .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { _ in
-            appState.showSettings = false
-        }
+        .animation(appState.pageTransitionAnimation, value: showSettings)
         .modifier(OptionKeyTracker())
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             var handled = false
@@ -113,7 +110,7 @@ private struct MainPage: View {
                     .blur(radius: showSettings || appState.isRecording ? 3 : 0)
                     .opacity(showSettings || appState.isRecording ? 0 : 1)
                     .offset(y: 1)
-                    .animation(.easeInOut(duration: 0.25), value: showSettings)
+                    .animation(appState.pageTransitionAnimation, value: showSettings)
                     .onTapGesture {
                         #if DEBUG
                         guard !appState.isDemo else {
@@ -290,6 +287,7 @@ private struct PinButton: View {
 /// Gear icon that morphs into an X when settings are shown.
 /// Click gear → open settings. Click X → close settings. Option-click → quit.
 struct SettingsGearButton: View {
+    @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
     var isRecording: Bool = false
     @State private var isHovered = false
@@ -334,7 +332,7 @@ struct SettingsGearButton: View {
                     .opacity(!optionHeld && showSettings && visible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.25), value: optionHeld)
-            .animation(.easeInOut(duration: 0.25), value: showSettings)
+            .animation(appState.pageTransitionAnimation, value: showSettings)
             .animation(.easeInOut(duration: 0.25), value: isRecording)
             .offset(y: 1)
             .frame(width: 24, height: 24)

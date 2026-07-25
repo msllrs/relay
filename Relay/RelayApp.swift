@@ -172,10 +172,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - NSPopoverDelegate
 
     func popoverDidShow(_ notification: Notification) {
+        appState.popoverVisible = true
         overlayController?.hide()
     }
 
     func popoverDidClose(_ notification: Notification) {
+        appState.popoverVisible = false
+        // Reset to the main page after popoverVisible is false, so the reset
+        // is instant (no invisible cross-fade a quick reopen could catch).
+        appState.showSettings = false
         if appState.isRecording, appState.showRecordingOverlay, let button = statusItem.button {
             overlayController?.show(below: button)
         }

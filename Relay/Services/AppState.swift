@@ -138,6 +138,15 @@ final class AppState: ObservableObject {
     /// Which popover page is showing. Lifted here (not view state) so the app
     /// delegate can open the popover straight to settings on right-click.
     @Published var showSettings = false
+    /// True while the popover is on screen (maintained by the app delegate).
+    @Published var popoverVisible = false
+
+    /// Page-switch animation for the main/settings cross-fade. Nil while the
+    /// popover is hidden, so opening straight to a page (right-click →
+    /// settings) shows it settled instead of replaying the transition.
+    var pageTransitionAnimation: Animation? {
+        popoverVisible ? .easeInOut(duration: 0.25) : nil
+    }
     @Published var displayTranscription = ""
     /// True when accessibility permission appears granted in TCC but global NSEvent
     /// monitors are silently broken — happens after an app update invalidates the binary hash.

@@ -51,7 +51,7 @@ struct SettingsPage: View {
                     .blur(radius: showSettings ? 0 : 3)
                     .opacity(showSettings ? 1 : 0)
                     .offset(y: 1)
-                    .animation(.easeInOut(duration: 0.25), value: showSettings)
+                    .animation(appState.pageTransitionAnimation, value: showSettings)
 
                 Spacer()
 
