@@ -49,6 +49,13 @@ final class AppState: ObservableObject {
     @Published var showRecordingOverlay: Bool {
         didSet { UserDefaults.standard.set(showRecordingOverlay, forKey: "showRecordingOverlay") }
     }
+    /// Opt-out (default on): close the popover shortly after copying, once the
+    /// Copied confirmation has had a moment to flash.
+    @Published var closePopoverOnCopy: Bool {
+        didSet { UserDefaults.standard.set(closePopoverOnCopy, forKey: "closePopoverOnCopy") }
+    }
+    /// Signals the app delegate to close the popover (it owns the NSPopover).
+    let popoverCloseRequests = PassthroughSubject<Void, Never>()
     /// Opt-in: show Relay in the Dock and app switcher. Off means menu bar only
     /// (the LSUIElement default).
     @Published var showInDock: Bool {
@@ -247,6 +254,11 @@ final class AppState: ObservableObject {
             self.showRecordingOverlay = true
         } else {
             self.showRecordingOverlay = UserDefaults.standard.bool(forKey: "showRecordingOverlay")
+        }
+        if UserDefaults.standard.object(forKey: "closePopoverOnCopy") == nil {
+            self.closePopoverOnCopy = true
+        } else {
+            self.closePopoverOnCopy = UserDefaults.standard.bool(forKey: "closePopoverOnCopy")
         }
         if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil {
             self.maxMicOnRecord = true
@@ -1056,6 +1068,16 @@ final class AppState: ObservableObject {
         writeToClipboard(prompt)
 
         flashCopiedConfirmation()
+
+        if closePopoverOnCopy {
+            // Delay past the Copied flash (and the 400ms clear-on-copy collapse)
+            // so the popover doesn't vanish mid-animation.
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(800))
+                guard let self, self.closePopoverOnCopy else { return }
+                self.popoverCloseRequests.send()
+            }
+        }
 
         if clearStackOnCopy {
             // Delay the clear so the Copied banner can fully appear before content collapses.

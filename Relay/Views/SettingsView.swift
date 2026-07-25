@@ -154,6 +154,7 @@ struct SettingsPage: View {
             SettingsToggle("Keep popover pinned", isOn: $appState.pinPopover)
             SettingsToggle("Show recording overlay", isOn: $appState.showRecordingOverlay)
             SettingsToggle("Clear after copying", isOn: $appState.clearStackOnCopy)
+            SettingsToggle("Close popover after copying", isOn: $appState.closePopoverOnCopy)
         }
     }
 

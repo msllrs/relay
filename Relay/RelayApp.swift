@@ -82,6 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self?.popover.behavior = pinned ? .applicationDefined : .transient
             })
 
+        // Close the popover when AppState asks (e.g. after copying)
+        cancellables.append(appState.popoverCloseRequests
+            .sink { [weak self] in
+                guard let self, self.popover.isShown else { return }
+                self.popover.close()
+            })
+
         // Update the icon when any AppState property changes.
         // objectWillChange fires before the value is set, so defer to next run loop.
         cancellables.append(appState.objectWillChange
