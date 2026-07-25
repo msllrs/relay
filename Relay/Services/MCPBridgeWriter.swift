@@ -83,9 +83,14 @@ final class MCPBridgeWriter {
     // MARK: - Private
 
     private func scheduleWrite() {
-        writeTask?.cancel()
+        // Trailing throttle, NOT a resetting debounce: during recording,
+        // objectWillChange fires faster than any debounce window (waveform
+        // levels, partial transcripts), so a cancel-and-reschedule debounce
+        // never fires and MCP clients see stale state for the whole session.
+        guard writeTask == nil else { return }
         writeTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
+            writeTask = nil
             guard !Task.isCancelled else { return }
             performWrite()
         }
