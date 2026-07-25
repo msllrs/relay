@@ -597,6 +597,12 @@ final class AppState: ObservableObject {
     /// - Parameter installPushToTalkMonitor: push-to-talk only makes sense when
     ///   a key is physically held, so URL-triggered sessions pass false.
     func startDictation(installPushToTalkMonitor: Bool = true) {
+        // Re-entrancy guard on the synchronous placeholder, not on
+        // voiceManager.isRecording (which flips true only after the async
+        // engine start): rapid triggers — e.g. queued URL commands delivered
+        // in a burst — would otherwise stack placeholders and restart the
+        // engine mid-session, killing the recording.
+        guard activeVoiceNoteID == nil else { return }
         if !isMonitoring {
             startMonitoring()
         }
