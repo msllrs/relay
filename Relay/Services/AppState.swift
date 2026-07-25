@@ -27,6 +27,12 @@ final class AppState: ObservableObject {
     @Published var captureClipboardOnStart: Bool {
         didSet { UserDefaults.standard.set(captureClipboardOnStart, forKey: "captureClipboardOnStart") }
     }
+    /// Opt-out (default on): screenshots taken while recording are added to
+    /// the stack automatically, saving users from needing to know that ⌃
+    /// sends a capture to the clipboard.
+    @Published var captureScreenshotsWhileRecording: Bool {
+        didSet { UserDefaults.standard.set(captureScreenshotsWhileRecording, forKey: "captureScreenshotsWhileRecording") }
+    }
     @Published var autoCopy: Bool {
         didSet { UserDefaults.standard.set(autoCopy, forKey: "autoCopy") }
     }
@@ -226,6 +232,7 @@ final class AppState: ObservableObject {
 
     let voiceManager = VoiceManager()
     let updaterManager = UpdaterManager()
+    private let screenshotWatcher = ScreenshotWatcher()
     private var clipboardMonitor: ClipboardMonitor?
     private(set) var hotkeyManager: HotkeyManager?
     private(set) var annotationManager: AnnotationManager?
@@ -249,6 +256,11 @@ final class AppState: ObservableObject {
         }
         self.pushToTalk = UserDefaults.standard.bool(forKey: "pushToTalk")
         self.captureClipboardOnStart = UserDefaults.standard.bool(forKey: "captureClipboardOnStart")
+        if UserDefaults.standard.object(forKey: "captureScreenshotsWhileRecording") == nil {
+            self.captureScreenshotsWhileRecording = true
+        } else {
+            self.captureScreenshotsWhileRecording = UserDefaults.standard.bool(forKey: "captureScreenshotsWhileRecording")
+        }
         if UserDefaults.standard.object(forKey: "autoCopy") != nil {
             self.autoCopy = UserDefaults.standard.bool(forKey: "autoCopy")
         } else {
@@ -373,6 +385,23 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.hotkeyManager?.stopEscMonitor()
                 self?.hotkeyManager?.stopKeyUpMonitor()
+            }
+            .store(in: &cancellables)
+
+        // Ingest screenshots taken during a recording session
+        screenshotWatcher.onScreenshot = { [weak self] url in
+            guard let self, self.captureScreenshotsWhileRecording else { return }
+            self.addItem(.fromFileURL(url))
+        }
+        voiceManager.$isRecording
+            .removeDuplicates()
+            .sink { [weak self] recording in
+                guard let self else { return }
+                if recording && self.captureScreenshotsWhileRecording {
+                    self.screenshotWatcher.start()
+                } else {
+                    self.screenshotWatcher.stop()
+                }
             }
             .store(in: &cancellables)
 
