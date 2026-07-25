@@ -19,7 +19,9 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 - **Recording overlay** — A draggable floating indicator that springs out of the menu bar, shows live audio levels, flashes on new clipboard captures, and doubles as a stop button
 - **Claude Code integration** — An MCP bridge exposes your context stack directly to Claude Code (`relay_get_context` and friends), so agents can pull what you've collected without any copy-paste
 - **Prompt composition** — Generates structured prompts in Markdown format, with an option to switch to XML
-- **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation
+- **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation; text is inserted directly via the Accessibility API (with ⌘V as fallback), and holding ⇧ as the paste lands also presses Return to send it
+- **Menu bar quick record** — Opt-in: left-click the menu bar icon to start/stop recording, right-click to open the panel
+- **Launch at login & Dock** — Register Relay as a login item, and optionally show it in the Dock and app switcher
 - **Transcript cleanup** — Three modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), and Formatted (clean + capitalization, deduplication, punctuation)
 - **Global hotkeys** — Customizable keyboard shortcuts for recording and annotation
 - **Siri voice activation** — Opt-in `relay://` URL commands let Siri Shortcuts (or Raycast, scripts, anything that opens URLs) start and stop recording hands-free
