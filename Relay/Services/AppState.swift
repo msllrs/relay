@@ -135,6 +135,9 @@ final class AppState: ObservableObject {
     }
     @Published var itemJustAdded = false
     @Published var isRecording = false
+    /// Which popover page is showing. Lifted here (not view state) so the app
+    /// delegate can open the popover straight to settings on right-click.
+    @Published var showSettings = false
     @Published var displayTranscription = ""
     /// True when accessibility permission appears granted in TCC but global NSEvent
     /// monitors are silently broken — happens after an app update invalidates the binary hash.

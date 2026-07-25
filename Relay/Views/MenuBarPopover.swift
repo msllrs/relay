@@ -11,15 +11,15 @@ let successGreen = Color(nsColor: NSColor(name: nil) { appearance in
 
 struct MenuBarPopover: View {
     @EnvironmentObject var appState: AppState
-    @State private var showSettings = false
+    private var showSettings: Bool { appState.showSettings }
 
     private var mainPage: some View {
-        MainPage(showSettings: $showSettings)
+        MainPage(showSettings: $appState.showSettings)
             .frame(width: 360, alignment: .topLeading)
     }
 
     private var settingsPage: some View {
-        SettingsPage(showSettings: $showSettings, voiceManager: appState.voiceManager, updaterManager: appState.updaterManager)
+        SettingsPage(showSettings: $appState.showSettings, voiceManager: appState.voiceManager, updaterManager: appState.updaterManager)
             .frame(width: 360, alignment: .topLeading)
     }
 
@@ -44,7 +44,7 @@ struct MenuBarPopover: View {
         .clipped()
         .animation(.easeInOut(duration: 0.25), value: showSettings)
         .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { _ in
-            showSettings = false
+            appState.showSettings = false
         }
         .modifier(OptionKeyTracker())
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in

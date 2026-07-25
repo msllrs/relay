@@ -130,16 +130,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func togglePopover() {
+        let isRightClick = NSApp.currentEvent?.type == .rightMouseUp
+
         // Opt-in: left-click toggles recording; right-click keeps opening the
         // popover. When the popover is already open, a click just closes it so
         // dismissing the panel can't accidentally start a recording.
         if appState.startRecordingOnMenubarClick,
-           NSApp.currentEvent?.type != .rightMouseUp,
+           !isRightClick,
            !popover.isShown {
             if appState.voiceManager.isRecording {
                 appState.finishDictationAndStop()
             } else {
                 appState.startDictation(installPushToTalkMonitor: false)
+            }
+            return
+        }
+
+        // Right-click jumps straight to settings — except in click-to-record
+        // mode, where right-click is the only mouse path to the main panel.
+        if isRightClick, !appState.startRecordingOnMenubarClick {
+            appState.showSettings = true
+            if !popover.isShown {
+                showPopover()
             }
             return
         }
