@@ -120,6 +120,54 @@ final class AnnotationPanel: NSPanel {
 /// Captures pointer drawing and renders the in-progress strokes. Uses the
 /// view's native (bottom-left origin) coordinate space throughout, which maps
 /// directly to the panel/screen-local points `toPixelRect` expects.
+extension NSCursor {
+    /// Annotation-mode cursor: crosshair ticks with a pen-tip dot in the
+    /// stroke color. Drawn in code so it stays crisp at any backing scale;
+    /// each tick is a dark core over a white halo so it reads on any
+    /// background.
+    @MainActor static let annotation: NSCursor = {
+        // A bundled asset takes precedence — add an "AnnotationCursor" image
+        // to the asset catalog (hotspot is its center) and it replaces the
+        // code-drawn fallback below.
+        if let asset = NSImage(named: "AnnotationCursor") {
+            return NSCursor(image: asset, hotSpot: NSPoint(x: asset.size.width / 2, y: asset.size.height / 2))
+        }
+
+        let size = NSSize(width: 24, height: 24)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+
+            let tickInner: CGFloat = 5
+            let tickOuter: CGFloat = 11
+            for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+                let start = CGPoint(x: center.x + dx * tickInner, y: center.y + dy * tickInner)
+                let end = CGPoint(x: center.x + dx * tickOuter, y: center.y + dy * tickOuter)
+                for (color, width) in [(NSColor.white, 3.5), (NSColor.black.withAlphaComponent(0.85), 1.5)] {
+                    ctx.setStrokeColor(color.cgColor)
+                    ctx.setLineWidth(width)
+                    ctx.setLineCap(.round)
+                    ctx.beginPath()
+                    ctx.move(to: start)
+                    ctx.addLine(to: end)
+                    ctx.strokePath()
+                }
+            }
+
+            let dotRadius: CGFloat = 3
+            let dotRect = CGRect(x: center.x - dotRadius, y: center.y - dotRadius,
+                                 width: dotRadius * 2, height: dotRadius * 2)
+            ctx.setFillColor(NSColor.systemOrange.cgColor)
+            ctx.fillEllipse(in: dotRect)
+            ctx.setStrokeColor(NSColor.white.cgColor)
+            ctx.setLineWidth(1)
+            ctx.strokeEllipse(in: dotRect)
+            return true
+        }
+        return NSCursor(image: image, hotSpot: NSPoint(x: 12, y: 12))
+    }()
+}
+
 final class AnnotationDrawingView: NSView {
     private let screenForView: NSScreen
     private weak var manager: AnnotationManager?
@@ -139,6 +187,14 @@ final class AnnotationDrawingView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false } // bottom-left origin, matches screen coords
+
+    /// Custom cursor while the overlay accepts drawing input. Cursor rects
+    /// don't apply during Option-gated click-through (the panel ignores mouse
+    /// events), so the normal cursor correctly returns while interacting with
+    /// apps underneath.
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .annotation)
+    }
 
     func clearStrokes() {
         completedStrokes = []
