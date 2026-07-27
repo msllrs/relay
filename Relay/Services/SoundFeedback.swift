@@ -14,6 +14,10 @@ enum RecordingSoundTheme: String, CaseIterable, Identifiable {
     // Airy family
     case drift
     case haze
+    // Ambient family — soft reverberant taps
+    case felt
+    case ripple
+    case halo
 
     var id: String { rawValue }
     var label: String { rawValue.capitalized }

@@ -145,8 +145,71 @@ def haze(start):
          0.16 if start else 0.11, 0.18 if start else 0.14, 0.08, 11, 0.16, 0.13)
 
 
+# --- Ambient family (soft taps with reverb tails, superwhisper-adjacent) -----
+
+def _reverberate(dry, tail_s, mix, seed=3):
+    """Convolve with a decaying-noise impulse response; output includes the tail."""
+    ir_n = int(tail_s * SR)
+    t = np.arange(ir_n) / SR
+    ir = np.random.default_rng(seed).standard_normal(ir_n) * np.exp(-7 * t / tail_s)
+    wet = np.convolve(dry, ir)
+    wet = wet / (np.max(np.abs(wet)) + 1e-9)
+    padded = np.concatenate([dry, np.zeros(len(wet) - len(dry))])
+    return (1 - mix) * padded + mix * wet
+
+
+def _tap(freq, dur=0.18):
+    """A felt-soft tap: slightly inharmonic partials, fast decay."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    sig = (np.sin(2 * np.pi * freq * t) * np.exp(-9 * t / dur)
+           + 0.20 * np.sin(2 * np.pi * 2.03 * freq * t) * np.exp(-14 * t / dur)
+           + 0.08 * np.sin(2 * np.pi * 3.9 * freq * t) * np.exp(-20 * t / dur))
+    a = int(0.006 * SR)
+    sig[:a] *= np.linspace(0, 1, a)
+    return sig
+
+
+def _bed(n, freq=103.0, amp=0.15):
+    """Quiet low drone under the tap, swelling in and fading with the tail."""
+    t = np.arange(n) / SR
+    drone = amp * np.sin(2 * np.pi * freq * t)
+    a = int(0.08 * SR)
+    e = np.exp(-3.0 * t / (n / SR))
+    e[:a] *= np.linspace(0, 1, a)
+    return drone * e
+
+
+# 9. Felt — one soft piano-like tap in a small room
+def felt(start):
+    f = 523.25 if start else 261.63
+    sig = _reverberate(_tap(f), tail_s=0.50, mix=0.40)
+    sig += _bed(len(sig))
+    write(f"felt-{'start' if start else 'stop'}", sig, 0.18 if start else 0.15)
+
+
+# 10. Ripple — two gentle taps, rising in and settling out, watery tail
+def ripple(start):
+    f1, f2 = (392.0, 523.25) if start else (523.25, 329.63)
+    gap = int(0.09 * SR)
+    tap1, tap2 = _tap(f1), _tap(f2)
+    dry = np.concatenate([tap1, np.zeros(max(0, gap + len(tap2) - len(tap1)))])
+    dry[gap:gap + len(tap2)] += 0.8 * tap2
+    sig = _reverberate(dry, tail_s=0.55, mix=0.50, seed=5)
+    sig += _bed(len(sig))
+    write(f"ripple-{'start' if start else 'stop'}", sig, 0.17 if start else 0.14)
+
+
+# 11. Halo — the bed carries it; the tap is barely there, longest tail
+def halo(start):
+    f = 329.63 if start else 246.94
+    sig = _reverberate(0.6 * _tap(f, dur=0.22), tail_s=0.70, mix=0.55, seed=9)
+    sig += _bed(len(sig), amp=0.30)
+    write(f"halo-{'start' if start else 'stop'}", sig, 0.15 if start else 0.13)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    for theme in (circuit, relay, breaker, pulse, abyss, umbra, drift, haze):
+    for theme in (circuit, relay, breaker, pulse, abyss, umbra, drift, haze, felt, ripple, halo):
         theme(True)
         theme(False)
