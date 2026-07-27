@@ -33,6 +33,13 @@ final class AppState: ObservableObject {
     @Published var recordingSounds: Bool {
         didSet { UserDefaults.standard.set(recordingSounds, forKey: "recordingSounds") }
     }
+    /// Opt-in: lower the system output volume while recording so music or
+    /// video audio doesn't bleed into the transcript.
+    @Published var duckAudioOnRecord: Bool {
+        didSet { UserDefaults.standard.set(duckAudioOnRecord, forKey: "duckAudioOnRecord") }
+    }
+    /// Output volume before ducking, for restore. Nil when not ducked.
+    private var preDuckOutputVolume: Float?
     @Published var hotkeyStartsDictation: Bool {
         didSet { UserDefaults.standard.set(hotkeyStartsDictation, forKey: "hotkeyStartsDictation") }
     }
@@ -314,6 +321,7 @@ final class AppState: ObservableObject {
         } else {
             self.recordingSounds = UserDefaults.standard.bool(forKey: "recordingSounds")
         }
+        self.duckAudioOnRecord = UserDefaults.standard.bool(forKey: "duckAudioOnRecord")
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
@@ -413,16 +421,34 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Start/stop chirps for eyes-free confirmation (Siri, Dock, hotkey)
+        // Start/stop chirps for eyes-free confirmation (Siri, Dock, hotkey).
+        // Ducking is sequenced around them so the chirps stay audible: duck
+        // shortly AFTER the start chirp, restore BEFORE the stop chirp.
         voiceManager.$isRecording
             .dropFirst()
             .removeDuplicates()
             .sink { [weak self] recording in
-                guard let self, self.recordingSounds else { return }
+                guard let self else { return }
                 if recording {
-                    self.soundFeedback.playStart()
+                    if self.recordingSounds {
+                        self.soundFeedback.playStart()
+                    }
+                    if self.duckAudioOnRecord, let current = SystemAudioHelper.getOutputVolume() {
+                        self.preDuckOutputVolume = current
+                        Task { [weak self] in
+                            try? await Task.sleep(for: .milliseconds(250))
+                            guard let self, self.voiceManager.isRecording else { return }
+                            SystemAudioHelper.setOutputVolume(current * 0.2)
+                        }
+                    }
                 } else {
-                    self.soundFeedback.playStop()
+                    if let restore = self.preDuckOutputVolume {
+                        SystemAudioHelper.setOutputVolume(restore)
+                        self.preDuckOutputVolume = nil
+                    }
+                    if self.recordingSounds {
+                        self.soundFeedback.playStop()
+                    }
                 }
             }
             .store(in: &cancellables)

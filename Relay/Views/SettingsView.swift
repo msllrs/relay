@@ -146,6 +146,7 @@ struct SettingsPage: View {
 
             SettingsToggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
             SettingsToggle("Start/stop sounds", isOn: $appState.recordingSounds)
+            SettingsToggle("Duck system audio while recording", isOn: $appState.duckAudioOnRecord)
         }
     }
 
