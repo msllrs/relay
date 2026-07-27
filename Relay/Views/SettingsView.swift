@@ -146,6 +146,18 @@ struct SettingsPage: View {
 
             SettingsToggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
             SettingsToggle("Start/stop sounds", isOn: $appState.recordingSounds)
+
+            if appState.recordingSounds {
+                SettingsRow("Sound") {
+                    Picker("Sound", selection: $appState.recordingSoundTheme) {
+                        ForEach(RecordingSoundTheme.allCases) { theme in
+                            Text(theme.label).tag(theme)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 140)
+                }
+            }
             SettingsToggle("Duck system audio while recording", isOn: $appState.duckAudioOnRecord)
         }
     }

@@ -33,6 +33,14 @@ final class AppState: ObservableObject {
     @Published var recordingSounds: Bool {
         didSet { UserDefaults.standard.set(recordingSounds, forKey: "recordingSounds") }
     }
+    @Published var recordingSoundTheme: RecordingSoundTheme {
+        didSet {
+            UserDefaults.standard.set(recordingSoundTheme.rawValue, forKey: "recordingSoundTheme")
+            soundFeedback.setTheme(recordingSoundTheme)
+            // Immediate audition when picking from the settings menu
+            soundFeedback.playStart()
+        }
+    }
     /// Opt-in: lower the system output volume while recording so music or
     /// video audio doesn't bleed into the transcript.
     @Published var duckAudioOnRecord: Bool {
@@ -331,6 +339,9 @@ final class AppState: ObservableObject {
         } else {
             self.recordingSounds = UserDefaults.standard.bool(forKey: "recordingSounds")
         }
+        self.recordingSoundTheme = RecordingSoundTheme(
+            rawValue: UserDefaults.standard.string(forKey: "recordingSoundTheme") ?? ""
+        ) ?? .pulse
         self.duckAudioOnRecord = UserDefaults.standard.bool(forKey: "duckAudioOnRecord")
         self.autoStopOnSilence = UserDefaults.standard.bool(forKey: "autoStopOnSilence")
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
@@ -431,6 +442,9 @@ final class AppState: ObservableObject {
                 self?.hotkeyManager?.stopKeyUpMonitor()
             }
             .store(in: &cancellables)
+
+        // didSet doesn't fire during init — apply the persisted theme now.
+        soundFeedback.setTheme(recordingSoundTheme)
 
         // Start/stop chirps for eyes-free confirmation (Siri, Dock, hotkey).
         // Ducking is sequenced around them so the chirps stay audible: duck
