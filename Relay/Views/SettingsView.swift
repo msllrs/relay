@@ -293,9 +293,9 @@ struct SettingsPage: View {
 
             HStack(spacing: 4) {
                 if let version = Self.appVersion {
-                    Text("v\(version)")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    // Links to the tagged release so the notes are one click away
+                    HoverLink("v\(version)", url: "https://github.com/msllrs/relay/releases/tag/v\(version)")
+                        .help("Release notes")
                 }
                 Text("·")
                     .font(.caption)
