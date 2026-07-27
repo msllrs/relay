@@ -3,6 +3,30 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.6.0</title>
+            <pubDate>Sun, 27 Jul 2026 15:20:00 +0000</pubDate>
+            <sparkle:version>183</sparkle:version>
+            <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## New
+
+- **Screenshots auto-added while recording** — captures land in your stack automatically, no need to know about ⌃-to-clipboard (works with CleanShot and custom save locations)
+- **Recent captures history** — the last 20 captures in settings, one click to copy any of them back
+- **Right-click the menu bar icon** to jump straight to settings
+- **Popover closes after copying** (turn off in Behavior settings)
+- **Dock controls** — start/stop recording from the Dock menu; clicking the Dock icon opens the panel
+- **Custom annotation cursor** while drawing on screen
+
+## Fixed
+
+- The end of your dictation no longer gets cut off when transcription takes a moment to finalize
+- Pressing Esc to cancel a recording no longer closes dialogs in the app you're working in
+- Claude Code's MCP bridge now sees live state during recording
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.6.0/Relay-v0.6.0.zip" length="5615169" type="application/octet-stream" sparkle:edSignature="cN36BMSFXtq33S4BV1B9QOffAuRv4y2mYhwuzvMHWVS+dScDtcZLu3vhZ/1j/RBOkH9LpZA+FYUVgvpR6Mf5Cw=="/>
+        </item>
+        <item>
             <title>0.5.0</title>
             <pubDate>Fri, 24 Jul 2026 21:11:00 +0000</pubDate>
             <sparkle:version>169</sparkle:version>
