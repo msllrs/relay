@@ -133,6 +133,21 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         try? startAudioCapture(inputDeviceID: inputDeviceID, request: request, onAudioLevel: onAudioLevel)
     }
 
+    /// Poll until the deadline; resolve with the latest partial only if the
+    /// recognizer still hasn't delivered a final result by then.
+    private func armFallback(deadline: Date) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.completionContinuation != nil else { return }
+            if Date() >= deadline {
+                let fallback = self.transcription.withLock { $0 }
+                self.completionContinuation?.resume(returning: fallback)
+                self.completionContinuation = nil
+            } else {
+                self.armFallback(deadline: deadline)
+            }
+        }
+    }
+
     func stopAndTranscribe() async throws -> String {
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -145,12 +160,12 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
             let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, any Error>) in
                 self.completionContinuation = continuation
 
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
-                    guard let self, self.completionContinuation != nil else { return }
-                    let fallback = self.transcription.withLock { $0 }
-                    self.completionContinuation?.resume(returning: fallback)
-                    self.completionContinuation = nil
-                }
+                // Hang guard, not a deadline: the recognizer's final result
+                // routinely contains last words that never appeared in any
+                // partial, so bailing early silently chops the tail. 10s is
+                // long enough for slow finalization (long dictations, cold
+                // model) while still recovering from a genuinely hung task.
+                armFallback(deadline: Date().addingTimeInterval(10))
             }
 
             recognitionTask?.cancel()
