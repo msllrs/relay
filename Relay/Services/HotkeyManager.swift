@@ -27,6 +27,33 @@ private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
     return carbon
 }
 
+/// CGEvent tap callback for the Esc-to-cancel monitor. The tap's run-loop
+/// source is scheduled on the main run loop, so this executes on the main
+/// thread. Returning nil consumes the event: the frontmost app never sees
+/// the Esc that cancelled a recording.
+private func escTapCallback(
+    proxy: CGEventTapProxy,
+    type: CGEventType,
+    event: CGEvent,
+    refcon: UnsafeMutableRawPointer?
+) -> Unmanaged<CGEvent>? {
+    guard let refcon else { return Unmanaged.passUnretained(event) }
+    let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+
+    // macOS disables taps it considers stalled; re-arm and let events flow.
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        MainActor.assumeIsolated { manager.reenableEscTap() }
+        return Unmanaged.passUnretained(event)
+    }
+
+    guard type == .keyDown, event.getIntegerValueField(.keyboardEventKeycode) == 53 else {
+        return Unmanaged.passUnretained(event)
+    }
+
+    MainActor.assumeIsolated { manager.escHandler?() }
+    return nil
+}
+
 @MainActor
 final class HotkeyManager {
     private weak var appState: AppState?
@@ -42,6 +69,9 @@ final class HotkeyManager {
     nonisolated(unsafe) private var localMonitor: Any?
     nonisolated(unsafe) private var escGlobalMonitor: Any?
     nonisolated(unsafe) private var escLocalMonitor: Any?
+    nonisolated(unsafe) private var escEventTap: CFMachPort?
+    nonisolated(unsafe) private var escRunLoopSource: CFRunLoopSource?
+    fileprivate var escHandler: (@MainActor () -> Void)?
     nonisolated(unsafe) private var globalKeyUpMonitor: Any?
     nonisolated(unsafe) private var localKeyUpMonitor: Any?
     nonisolated(unsafe) private var annotateGlobalKeyUpMonitor: Any?
@@ -263,7 +293,30 @@ final class HotkeyManager {
 
     func startEscMonitor(onEsc: @escaping @MainActor () -> Void) {
         stopEscMonitor()
+        escHandler = onEsc
 
+        // Active CGEvent tap so the cancelling Esc is CONSUMED — NSEvent
+        // global monitors only observe, so the frontmost app would also
+        // receive the Esc (closing its dialogs, exiting full screen, …).
+        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        if let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: escTapCallback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) {
+            escEventTap = tap
+            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+            escRunLoopSource = source
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+            CGEvent.tapEnable(tap: tap, enable: true)
+            return
+        }
+
+        // Fallback when the tap can't be created (no accessibility): cancel
+        // still works via observe-only monitors, but Esc leaks through.
         escGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 { // Escape
                 MainActor.assumeIsolated {
@@ -287,7 +340,23 @@ final class HotkeyManager {
         detectAccessibilityBrokenIfNeeded(globalMonitor: escGlobalMonitor)
     }
 
+    /// Re-arm the tap after macOS disables it for stalling.
+    fileprivate func reenableEscTap() {
+        if let tap = escEventTap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
+    }
+
     func stopEscMonitor() {
+        escHandler = nil
+        if let escRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), escRunLoopSource, .commonModes)
+            self.escRunLoopSource = nil
+        }
+        if let escEventTap {
+            CGEvent.tapEnable(tap: escEventTap, enable: false)
+            self.escEventTap = nil
+        }
         if let escGlobalMonitor { NSEvent.removeMonitor(escGlobalMonitor) }
         if let escLocalMonitor { NSEvent.removeMonitor(escLocalMonitor) }
         escGlobalMonitor = nil
@@ -413,6 +482,12 @@ final class HotkeyManager {
         if let annotateLocalMonitor { NSEvent.removeMonitor(annotateLocalMonitor) }
         if let escGlobalMonitor { NSEvent.removeMonitor(escGlobalMonitor) }
         if let escLocalMonitor { NSEvent.removeMonitor(escLocalMonitor) }
+        if let escRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), escRunLoopSource, .commonModes)
+        }
+        if let escEventTap {
+            CGEvent.tapEnable(tap: escEventTap, enable: false)
+        }
         if let globalKeyUpMonitor { NSEvent.removeMonitor(globalKeyUpMonitor) }
         if let localKeyUpMonitor { NSEvent.removeMonitor(localKeyUpMonitor) }
         if let annotateGlobalKeyUpMonitor { NSEvent.removeMonitor(annotateGlobalKeyUpMonitor) }
