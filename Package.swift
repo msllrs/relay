@@ -29,7 +29,8 @@ let package = Package(
                 "Relay.entitlements"
             ],
             resources: [
-                .process("Assets.xcassets")
+                .process("Assets.xcassets"),
+                .copy("Resources/Sounds")
             ]
         )
     ]

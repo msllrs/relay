@@ -29,6 +29,10 @@ final class AppState: ObservableObject {
     @Published var maxMicOnRecord: Bool {
         didSet { UserDefaults.standard.set(maxMicOnRecord, forKey: "maxMicOnRecord") }
     }
+    /// Opt-out (default on): short chirps when recording starts and stops.
+    @Published var recordingSounds: Bool {
+        didSet { UserDefaults.standard.set(recordingSounds, forKey: "recordingSounds") }
+    }
     @Published var hotkeyStartsDictation: Bool {
         didSet { UserDefaults.standard.set(hotkeyStartsDictation, forKey: "hotkeyStartsDictation") }
     }
@@ -248,6 +252,7 @@ final class AppState: ObservableObject {
     let voiceManager = VoiceManager()
     let updaterManager = UpdaterManager()
     private let screenshotWatcher = ScreenshotWatcher()
+    private let soundFeedback = SoundFeedback()
     private var clipboardMonitor: ClipboardMonitor?
     private(set) var hotkeyManager: HotkeyManager?
     private(set) var annotationManager: AnnotationManager?
@@ -303,6 +308,11 @@ final class AppState: ObservableObject {
             self.maxMicOnRecord = true
         } else {
             self.maxMicOnRecord = UserDefaults.standard.bool(forKey: "maxMicOnRecord")
+        }
+        if UserDefaults.standard.object(forKey: "recordingSounds") == nil {
+            self.recordingSounds = true
+        } else {
+            self.recordingSounds = UserDefaults.standard.bool(forKey: "recordingSounds")
         }
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
@@ -400,6 +410,20 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.hotkeyManager?.stopEscMonitor()
                 self?.hotkeyManager?.stopKeyUpMonitor()
+            }
+            .store(in: &cancellables)
+
+        // Start/stop chirps for eyes-free confirmation (Siri, Dock, hotkey)
+        voiceManager.$isRecording
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] recording in
+                guard let self, self.recordingSounds else { return }
+                if recording {
+                    self.soundFeedback.playStart()
+                } else {
+                    self.soundFeedback.playStop()
+                }
             }
             .store(in: &cancellables)
 
