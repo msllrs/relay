@@ -40,6 +40,16 @@ final class AppState: ObservableObject {
     }
     /// Output volume before ducking, for restore. Nil when not ducked.
     private var preDuckOutputVolume: Float?
+    /// Opt-in: end the dictation automatically after ~3s of silence, once
+    /// some speech has been transcribed. Ignored in push-to-talk (the held
+    /// key already defines the session length).
+    @Published var autoStopOnSilence: Bool {
+        didSet { UserDefaults.standard.set(autoStopOnSilence, forKey: "autoStopOnSilence") }
+    }
+    /// Loudest level seen this session — silence is judged relative to it,
+    /// so the detector adapts to mic gain and distance.
+    private var sessionPeakLevel: Float = 0
+    private var silenceStartedAt: Date?
     @Published var hotkeyStartsDictation: Bool {
         didSet { UserDefaults.standard.set(hotkeyStartsDictation, forKey: "hotkeyStartsDictation") }
     }
@@ -322,6 +332,7 @@ final class AppState: ObservableObject {
             self.recordingSounds = UserDefaults.standard.bool(forKey: "recordingSounds")
         }
         self.duckAudioOnRecord = UserDefaults.standard.bool(forKey: "duckAudioOnRecord")
+        self.autoStopOnSilence = UserDefaults.standard.bool(forKey: "autoStopOnSilence")
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
@@ -449,6 +460,37 @@ final class AppState: ObservableObject {
                     if self.recordingSounds {
                         self.soundFeedback.playStop()
                     }
+                }
+            }
+            .store(in: &cancellables)
+
+        // Auto-stop after sustained silence. Armed only once speech has been
+        // transcribed, thresholded relative to the session's peak level, and
+        // skipped for push-to-talk where the held key ends the session.
+        voiceManager.$audioLevel
+            .sink { [weak self] level in
+                guard let self,
+                      self.autoStopOnSilence,
+                      !self.pushToTalk,
+                      self.voiceManager.isRecording else {
+                    self?.silenceStartedAt = nil
+                    return
+                }
+                self.sessionPeakLevel = max(self.sessionPeakLevel, level)
+                guard !self.voiceManager.partialTranscription.isEmpty else { return }
+
+                let threshold = max(0.015, self.sessionPeakLevel * 0.15)
+                if level < threshold {
+                    if let started = self.silenceStartedAt {
+                        if Date().timeIntervalSince(started) > 3.0 {
+                            self.silenceStartedAt = nil
+                            self.finishDictationAndStop()
+                        }
+                    } else {
+                        self.silenceStartedAt = Date()
+                    }
+                } else {
+                    self.silenceStartedAt = nil
                 }
             }
             .store(in: &cancellables)
@@ -674,6 +716,8 @@ final class AppState: ObservableObject {
         pendingRefs = []
         transcriptionTrimOffset = 0
         recordingStartTime = Date()
+        sessionPeakLevel = 0
+        silenceStartedAt = nil
         // Reserve a placeholder in the stack so the voice note keeps its position
         let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
         activeVoiceNoteID = placeholder.id

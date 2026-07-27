@@ -153,6 +153,7 @@ struct SettingsPage: View {
     private var behaviorSection: some View {
         SettingsSection("Behavior") {
             SettingsToggle("Push-to-talk", isOn: $appState.pushToTalk)
+            SettingsToggle("Auto-stop after silence", isOn: $appState.autoStopOnSilence)
             SettingsToggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
             SettingsToggle("Add screenshots taken while recording", isOn: $appState.captureScreenshotsWhileRecording)
             SettingsToggle("Keep popover pinned", isOn: $appState.pinPopover)
