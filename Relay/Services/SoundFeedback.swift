@@ -3,14 +3,17 @@ import AppKit
 /// Selectable start/stop sound pairs, bundled as <theme>-start/stop.wav in
 /// Resources/Sounds. Regenerate with Scripts/generate-sounds.py.
 enum RecordingSoundTheme: String, CaseIterable, Identifiable {
-    case pulse
-    case ember
-    case signal
-    case sonar
-    case drift
+    // Blip family
     case circuit
-    case hollow
-    case glass
+    case relay
+    case breaker
+    // Somber glide family
+    case pulse
+    case abyss
+    case umbra
+    // Airy family
+    case drift
+    case haze
 
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
