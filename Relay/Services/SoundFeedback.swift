@@ -23,7 +23,7 @@ final class SoundFeedback {
     private var startSound: NSSound?
     private var stopSound: NSSound?
 
-    init(theme: RecordingSoundTheme = .pulse) {
+    init(theme: RecordingSoundTheme = .circuit) {
         setTheme(theme)
     }
 

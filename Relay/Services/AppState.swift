@@ -341,7 +341,7 @@ final class AppState: ObservableObject {
         }
         self.recordingSoundTheme = RecordingSoundTheme(
             rawValue: UserDefaults.standard.string(forKey: "recordingSoundTheme") ?? ""
-        ) ?? .pulse
+        ) ?? .circuit
         self.duckAudioOnRecord = UserDefaults.standard.bool(forKey: "duckAudioOnRecord")
         self.autoStopOnSilence = UserDefaults.standard.bool(forKey: "autoStopOnSilence")
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
