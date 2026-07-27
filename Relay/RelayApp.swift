@@ -129,6 +129,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    // MARK: - Dock integration (visible when Show in Dock is on)
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        let recording = appState.voiceManager.isRecording
+        let toggle = NSMenuItem(
+            title: recording ? "Stop Recording" : "Start Recording",
+            action: #selector(toggleRecordingFromDock),
+            keyEquivalent: ""
+        )
+        toggle.target = self
+        menu.addItem(toggle)
+        return menu
+    }
+
+    @objc private func toggleRecordingFromDock() {
+        if appState.voiceManager.isRecording {
+            appState.finishDictationAndStop()
+        } else {
+            // No key is held for push-to-talk when triggered from the Dock
+            appState.startDictation(installPushToTalkMonitor: false)
+        }
+    }
+
+    /// Clicking the Dock icon opens the popover (the app has no windows).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !popover.isShown {
+            showPopover()
+        }
+        return false
+    }
+
     @objc private func togglePopover() {
         let isRightClick = NSApp.currentEvent?.type == .rightMouseUp
 
