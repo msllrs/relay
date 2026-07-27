@@ -54,6 +54,10 @@ final class AppState: ObservableObject {
     @Published var autoStopOnSilence: Bool {
         didSet { UserDefaults.standard.set(autoStopOnSilence, forKey: "autoStopOnSilence") }
     }
+    /// Seconds of sustained silence before auto-stop ends the session.
+    @Published var autoStopSilenceDuration: Double {
+        didSet { UserDefaults.standard.set(autoStopSilenceDuration, forKey: "autoStopSilenceDuration") }
+    }
     /// Loudest level seen this session — silence is judged relative to it,
     /// so the detector adapts to mic gain and distance.
     private var sessionPeakLevel: Float = 0
@@ -344,6 +348,8 @@ final class AppState: ObservableObject {
         ) ?? .circuit
         self.duckAudioOnRecord = UserDefaults.standard.bool(forKey: "duckAudioOnRecord")
         self.autoStopOnSilence = UserDefaults.standard.bool(forKey: "autoStopOnSilence")
+        let storedSilenceDuration = UserDefaults.standard.double(forKey: "autoStopSilenceDuration")
+        self.autoStopSilenceDuration = storedSilenceDuration > 0 ? storedSilenceDuration : 3.0
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
@@ -496,7 +502,7 @@ final class AppState: ObservableObject {
                 let threshold = max(0.015, self.sessionPeakLevel * 0.15)
                 if level < threshold {
                     if let started = self.silenceStartedAt {
-                        if Date().timeIntervalSince(started) > 3.0 {
+                        if Date().timeIntervalSince(started) > self.autoStopSilenceDuration {
                             self.silenceStartedAt = nil
                             self.finishDictationAndStop()
                         }

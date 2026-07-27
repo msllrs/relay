@@ -166,6 +166,20 @@ struct SettingsPage: View {
         SettingsSection("Behavior") {
             SettingsToggle("Push-to-talk", isOn: $appState.pushToTalk)
             SettingsToggle("Auto-stop after silence", isOn: $appState.autoStopOnSilence)
+
+            if appState.autoStopOnSilence {
+                SettingsRow("After") {
+                    Picker("After", selection: $appState.autoStopSilenceDuration) {
+                        Text("1.5s").tag(1.5)
+                        Text("3s").tag(3.0)
+                        Text("5s").tag(5.0)
+                        Text("10s").tag(10.0)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 180)
+                }
+            }
             SettingsToggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
             SettingsToggle("Add screenshots taken while recording", isOn: $appState.captureScreenshotsWhileRecording)
             SettingsToggle("Keep popover pinned", isOn: $appState.pinPopover)
