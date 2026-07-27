@@ -53,6 +53,10 @@ if [ "$CONFIG" = "debug" ] && [ -d ".build/Relay.app" ]; then
     rm -rf ".build/Relay.app"
 fi
 
+# Assemble into a fresh bundle: cp -R into an existing one MERGES directories,
+# so removed resources (old sounds, assets) would otherwise ship forever.
+rm -rf ".build/${APP_NAME}"
+
 APP_DIR=".build/${APP_NAME}/Contents"
 mkdir -p "$APP_DIR/MacOS"
 mkdir -p "$APP_DIR/Resources"
