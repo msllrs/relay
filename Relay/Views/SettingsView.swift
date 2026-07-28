@@ -125,7 +125,7 @@ struct SettingsPage: View {
             SettingsRow("Engine") {
                 HStack(spacing: 6) {
                     Picker("Engine", selection: $voiceManager.selectedEngineType) {
-                        ForEach(SpeechEngineType.allCases) { engine in
+                        ForEach(SpeechEngineType.availableCases) { engine in
                             Text(engine.label).tag(engine)
                         }
                     }

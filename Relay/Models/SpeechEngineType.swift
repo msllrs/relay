@@ -4,6 +4,7 @@ enum SpeechEngineType: String, CaseIterable, Identifiable {
     case native
     case whisperKit
     case parakeet
+    case speechAnalyzer
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum SpeechEngineType: String, CaseIterable, Identifiable {
         case .native: "Native"
         case .whisperKit: "Whisper"
         case .parakeet: "Parakeet"
+        case .speechAnalyzer: "Apple v2"
         }
     }
 
@@ -20,7 +22,13 @@ enum SpeechEngineType: String, CaseIterable, Identifiable {
         case .native: "macOS built-in (no download)"
         case .whisperKit: "WhisperKit (~142MB download)"
         case .parakeet: "Parakeet via FluidAudio (~download)"
+        case .speechAnalyzer: "Apple SpeechAnalyzer (macOS 26+)"
         }
+    }
+
+    /// Cases usable on this system — SpeechAnalyzer needs macOS 26.
+    static var availableCases: [SpeechEngineType] {
+        allCases.filter { $0 != .speechAnalyzer || SpeechAnalyzerEngine.isSupported }
     }
 
     // MARK: - UserDefaults persistence

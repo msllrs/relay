@@ -265,6 +265,7 @@ final class VoiceManager: ObservableObject {
         case .native: NativeSpeechEngine()
         case .whisperKit: WhisperKitEngine()
         case .parakeet: FluidAudioEngine()
+        case .speechAnalyzer: SpeechAnalyzerEngine()
         }
     }
 }
