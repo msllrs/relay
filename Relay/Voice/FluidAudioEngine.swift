@@ -87,6 +87,14 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         }
 
         streamedSamples.withLock { $0 = 0 }
+
+        // Warm-capture pre-roll: audio from just before the hotkey landed.
+        let preRoll = PreRollAudioService.shared.drainPreRoll()
+        if let preRollBuffer = PCM16kMonoConverter.makeBuffer(from: preRoll) {
+            streamedSamples.withLock { $0 += preRoll.count }
+            await streaming.streamAudio(preRollBuffer)
+        }
+
         let captureSource = AudioCaptureSourceFactory.make()
         self.capture = captureSource
         try captureSource.start(deviceID: inputDeviceID, onBuffer: { [weak self] buffer in

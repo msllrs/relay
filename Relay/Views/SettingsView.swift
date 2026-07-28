@@ -145,6 +145,7 @@ struct SettingsPage: View {
             }
 
             SettingsToggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
+            SettingsToggle("Instant start (keeps mic warm)", isOn: $appState.warmCapturePreRoll)
             SettingsToggle("Start/stop sounds", isOn: $appState.recordingSounds)
 
             if appState.recordingSounds {

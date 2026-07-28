@@ -156,7 +156,21 @@ final class AppState: ObservableObject {
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")
-            voiceManager.inputDeviceID = selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
+            let deviceID = selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
+            voiceManager.inputDeviceID = deviceID
+            PreRollAudioService.shared.deviceChanged(to: deviceID)
+        }
+    }
+    /// Opt-in: keep the mic warm while idle so recordings include ~0.45s of
+    /// audio from before the hotkey landed. Shows the mic-in-use indicator
+    /// permanently, hence off by default.
+    @Published var warmCapturePreRoll: Bool {
+        didSet {
+            UserDefaults.standard.set(warmCapturePreRoll, forKey: "warmCapturePreRoll")
+            PreRollAudioService.shared.setEnabled(
+                warmCapturePreRoll,
+                deviceID: selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
+            )
         }
     }
     /// Live list of input devices, refreshed on hotplug so the settings picker never goes stale.
@@ -326,6 +340,7 @@ final class AppState: ObservableObject {
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
         self.sendAfterPasteWithShift = UserDefaults.standard.bool(forKey: "sendAfterPasteWithShift")
         self.restoreClipboardAfterPaste = UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste")
+        self.warmCapturePreRoll = UserDefaults.standard.bool(forKey: "warmCapturePreRoll")
         self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
         self.showInDock = UserDefaults.standard.bool(forKey: "showInDock")
         self.startRecordingOnMenubarClick = UserDefaults.standard.bool(forKey: "startRecordingOnMenubarClick")
@@ -387,8 +402,19 @@ final class AppState: ObservableObject {
         }
         audioDeviceMonitor.onDefaultInputDeviceChanged = { [weak self] in
             self?.voiceManager.defaultInputDeviceChanged()
+            // Warm capture on the system default follows it too.
+            if let self, self.selectedInputDeviceID == 0 {
+                PreRollAudioService.shared.deviceChanged(to: UInt32?.none)
+            }
         }
         audioDeviceMonitor.start()
+
+        if warmCapturePreRoll {
+            PreRollAudioService.shared.setEnabled(
+                true,
+                deviceID: selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
+            )
+        }
 
         // Track the frontmost non-Relay app so auto-paste can hand focus back
         // to it. Observer lives for the app's lifetime (AppState never deallocates).

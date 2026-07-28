@@ -57,6 +57,11 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
 
         // Skip initial buffers to avoid hardware startup transients that
         // SFSpeechRecognizer can misinterpret as speech (e.g. "no").
+        // Warm-capture pre-roll: audio from just before the hotkey landed.
+        if let preRollBuffer = PCM16kMonoConverter.makeBuffer(from: PreRollAudioService.shared.drainPreRoll()) {
+            request.append(preRollBuffer)
+        }
+
         let buffersToSkip = Mutex(3)
         // SFSpeechAudioBufferRecognitionRequest isn't marked Sendable but append(_:)
         // is safe to call from the capture queue (it's fed from audio threads by design).

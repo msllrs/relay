@@ -54,7 +54,8 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
             throw SpeechEngineError.engineUnavailable
         }
 
-        audioSamples = []
+        // Warm-capture pre-roll: audio from just before the hotkey landed.
+        audioSamples = PreRollAudioService.shared.drainPreRoll()
         isRecordingFlag = true
 
         let capture = AudioCaptureSourceFactory.make()

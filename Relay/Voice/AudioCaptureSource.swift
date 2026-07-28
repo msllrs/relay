@@ -91,6 +91,19 @@ final class PCM16kMonoConverter {
         }
     }
 
+    static func makeBuffer(from samples: [Float]) -> AVAudioPCMBuffer? {
+        guard !samples.isEmpty,
+              let buffer = AVAudioPCMBuffer(pcmFormat: makeTargetFormat(), frameCapacity: AVAudioFrameCount(samples.count)),
+              let channel = buffer.floatChannelData?[0]
+        else { return nil }
+        samples.withUnsafeBufferPointer { source in
+            guard let base = source.baseAddress else { return }
+            channel.update(from: base, count: source.count)
+        }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        return buffer
+    }
+
     static func rms(of buffer: AVAudioPCMBuffer) -> Float {
         guard let samples = buffer.floatChannelData?[0] else { return 0 }
         let frames = Int(buffer.frameLength)
