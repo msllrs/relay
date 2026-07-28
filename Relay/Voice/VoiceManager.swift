@@ -37,6 +37,43 @@ final class VoiceManager: ObservableObject {
         let engine = Self.createEngine(for: type)
         self.activeEngine = engine
         self.engineCache[type] = engine
+
+        // Load a previously-downloaded model as soon as the app launches, and
+        // again after wake/unlock (long sleeps can evict CoreML state), so the
+        // first dictation never pays the cold-start.
+        Task { @MainActor [weak self] in
+            self?.prewarmIfPossible()
+        }
+        let workspace = NSWorkspace.shared.notificationCenter
+        prewarmObservers.append(workspace.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.prewarmIfPossible() }
+        })
+        prewarmObservers.append(DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.prewarmIfPossible() }
+        })
+    }
+
+    private var prewarmObservers: [NSObjectProtocol] = []
+
+    private static func primedKey(for type: SpeechEngineType) -> String {
+        "modelPrimed.\(type.rawValue)"
+    }
+
+    /// Silently load an already-downloaded model into memory. Never triggers a
+    /// first download — only engines the user has downloaded before qualify.
+    func prewarmIfPossible() {
+        guard currentEngineNeedsDownload,
+              UserDefaults.standard.bool(forKey: Self.primedKey(for: selectedEngineType)),
+              !isDownloading
+        else { return }
+        let engine = activeEngine
+        Task.detached(priority: .utility) {
+            try? await engine.downloadModel { _ in }
+        }
     }
 
     var currentEngineNeedsDownload: Bool {
@@ -64,6 +101,8 @@ final class VoiceManager: ObservableObject {
 
         isDownloading = false
         downloadComplete = true
+        // Remember the download succeeded so future launches prewarm this engine.
+        UserDefaults.standard.set(true, forKey: Self.primedKey(for: selectedEngineType))
         try? await Task.sleep(for: .seconds(1.5))
         downloadComplete = false
     }
@@ -218,6 +257,7 @@ final class VoiceManager: ObservableObject {
             engineCache[selectedEngineType] = engine
             activeEngine = engine
         }
+        prewarmIfPossible()
     }
 
     private static func createEngine(for type: SpeechEngineType) -> any SpeechEngine {
