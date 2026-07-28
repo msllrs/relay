@@ -277,17 +277,21 @@ struct SettingsPage: View {
 
             SettingsRow(
                 "Transcript",
-                help: "Raw is verbatim. Clean strips filler words. Formatted also fixes capitalization and punctuation. AI Polish uses Apple's on-device model to resolve self-corrections too — nothing leaves your Mac."
+                help: "Raw is verbatim. Clean strips filler words. Formatted also fixes capitalization and punctuation. AI Polish uses Apple's on-device model to resolve self-corrections too — nothing leaves your Mac. It needs Apple Intelligence turned on in System Settings."
             ) {
                 Picker("Transcript", selection: $appState.transcriptEnhancement) {
-                    // AI Polish only shows where Apple Intelligence is available.
-                    ForEach(TranscriptEnhancement.allCases.filter {
-                        $0 != .aiPolish || FoundationModelsEnhancer.isAvailable
-                    }) { level in
-                        Text(level.label).tag(level)
+                    ForEach(TranscriptEnhancement.allCases) { level in
+                        if level == .aiPolish && !FoundationModelsEnhancer.isAvailable {
+                            // Visible but disabled beats hidden: the feature is
+                            // discoverable and the label says what's missing.
+                            Text("AI Polish (needs Apple Intelligence)")
+                                .tag(level)
+                                .selectionDisabled()
+                        } else {
+                            Text(level.label).tag(level)
+                        }
                     }
                 }
-                .pickerStyle(.segmented)
                 .labelsHidden()
             }
         }
