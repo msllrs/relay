@@ -61,7 +61,7 @@ final class AppState: ObservableObject {
     /// Loudest level seen this session — silence is judged relative to it,
     /// so the detector adapts to mic gain and distance.
     private var sessionPeakLevel: Float = 0
-    private var silenceStartedAt: Date?
+    private var silenceGate = SilenceGate()
     @Published var hotkeyStartsDictation: Bool {
         didSet { UserDefaults.standard.set(hotkeyStartsDictation, forKey: "hotkeyStartsDictation") }
     }
@@ -526,24 +526,17 @@ final class AppState: ObservableObject {
                       self.autoStopOnSilence,
                       !self.pushToTalk,
                       self.voiceManager.isRecording else {
-                    self?.silenceStartedAt = nil
+                    self?.silenceGate.reset()
                     return
                 }
                 self.sessionPeakLevel = max(self.sessionPeakLevel, level)
                 guard !self.voiceManager.partialTranscription.isEmpty else { return }
 
                 let threshold = max(0.015, self.sessionPeakLevel * 0.15)
-                if level < threshold {
-                    if let started = self.silenceStartedAt {
-                        if Date().timeIntervalSince(started) > self.autoStopSilenceDuration {
-                            self.silenceStartedAt = nil
-                            self.finishDictationAndStop()
-                        }
-                    } else {
-                        self.silenceStartedAt = Date()
-                    }
-                } else {
-                    self.silenceStartedAt = nil
+                let silentFor = self.silenceGate.process(isQuiet: level < threshold)
+                if silentFor > self.autoStopSilenceDuration {
+                    self.silenceGate.reset()
+                    self.finishDictationAndStop()
                 }
             }
             .store(in: &cancellables)
@@ -770,7 +763,7 @@ final class AppState: ObservableObject {
         transcriptionTrimOffset = 0
         recordingStartTime = Date()
         sessionPeakLevel = 0
-        silenceStartedAt = nil
+        silenceGate.reset()
         // Reserve a placeholder in the stack so the voice note keeps its position
         let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
         activeVoiceNoteID = placeholder.id
