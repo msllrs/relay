@@ -5,8 +5,8 @@ import ServiceManagement
 import SwiftUI
 
 /// A line in the rolling capture history shown in settings.
-struct CaptureHistoryEntry: Identifiable, Equatable {
-    let id = UUID()
+struct CaptureHistoryEntry: Identifiable, Equatable, Codable {
+    var id = UUID()
     let contentType: ContentType
     /// Single-line summary for the settings list.
     let preview: String
@@ -228,7 +228,11 @@ final class AppState: ObservableObject {
     /// Rolling history of the last 20 captures, newest first. In-memory only —
     /// clipboard contents can include secrets, so this is deliberately never
     /// persisted to disk.
-    @Published private(set) var captureHistory: [CaptureHistoryEntry] = []
+    /// Loaded from disk at launch and saved on every change, so history
+    /// survives quits and updates.
+    @Published private(set) var captureHistory: [CaptureHistoryEntry] = CaptureHistoryStore.default.load() {
+        didSet { CaptureHistoryStore.default.save(captureHistory) }
+    }
     @Published var itemJustAdded = false
     @Published var isRecording = false
     /// Which popover page is showing. Lifted here (not view state) so the app
