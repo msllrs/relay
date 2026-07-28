@@ -165,7 +165,9 @@ struct SettingsPage: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 140)
+                    // Menu pickers size to content; without trailing alignment
+                    // the flexible frame centers them off the right edge.
+                    .frame(maxWidth: 140, alignment: .trailing)
                 }
             }
             SettingsToggle("Duck system audio while recording", isOn: $appState.duckAudioOnRecord)
