@@ -167,6 +167,14 @@ final class AppState: ObservableObject {
     @Published var vocabularyTerms: [String] = VocabularyStore.load() {
         didSet { VocabularyStore.save(vocabularyTerms) }
     }
+    /// Opt-in: after auto-paste, watch the target field and learn vocabulary
+    /// from words the user manually corrects. Entirely on-device.
+    @Published var learnFromCorrections: Bool {
+        didSet {
+            UserDefaults.standard.set(learnFromCorrections, forKey: "learnFromCorrections")
+            CorrectionLearner.shared.isEnabled = learnFromCorrections
+        }
+    }
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")
@@ -355,6 +363,8 @@ final class AppState: ObservableObject {
         self.sendAfterPasteWithShift = UserDefaults.standard.bool(forKey: "sendAfterPasteWithShift")
         self.restoreClipboardAfterPaste = UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste")
         self.warmCapturePreRoll = UserDefaults.standard.bool(forKey: "warmCapturePreRoll")
+        self.learnFromCorrections = UserDefaults.standard.bool(forKey: "learnFromCorrections")
+        CorrectionLearner.shared.isEnabled = UserDefaults.standard.bool(forKey: "learnFromCorrections")
         self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
         self.showInDock = UserDefaults.standard.bool(forKey: "showInDock")
         self.startRecordingOnMenubarClick = UserDefaults.standard.bool(forKey: "startRecordingOnMenubarClick")
@@ -1199,6 +1209,9 @@ final class AppState: ObservableObject {
             let text = NSPasteboard.general.string(forType: .string) ?? ""
             if text.isEmpty || !Self.insertTextViaAccessibility(text) {
                 self.simulatePaste()
+            }
+            if !text.isEmpty {
+                CorrectionLearner.shared.observePaste(text: text)
             }
             // Holding ⇧ when the paste lands submits it (opt-in): give the
             // target a beat to process the insertion, then press Return.

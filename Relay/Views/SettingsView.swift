@@ -37,6 +37,7 @@ struct SettingsPage: View {
     private var dictionarySection: some View {
         SettingsSection("Dictionary") {
             DictionaryEditor()
+            SettingsToggle("Learn from corrections", isOn: $appState.learnFromCorrections)
         }
     }
 
