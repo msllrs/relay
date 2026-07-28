@@ -16,6 +16,7 @@ struct SettingsPage: View {
     @State private var canScrollDown = false
 
     private static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    private static let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
 
     /// The scrollable sections, shared by the scroller and its blurred twins.
     private var sectionsContent: some View {
@@ -338,6 +339,15 @@ struct SettingsPage: View {
                     // Links to the tagged release so the notes are one click away
                     HoverLink("v\(version)", url: "https://github.com/msllrs/relay/releases/tag/v\(version)")
                         .help("Release notes")
+                    #if DEBUG
+                    // Dev builds show the build number so it's obvious which
+                    // iteration is running.
+                    if let build = Self.buildNumber {
+                        Text("(\(build))")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    #endif
                 }
                 Text("·")
                     .font(.caption)
