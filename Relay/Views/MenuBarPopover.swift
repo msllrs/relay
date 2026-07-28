@@ -99,13 +99,19 @@ private struct MainPage: View {
         VStack(spacing: 0) {
             // Header — hides when recording to give more room to transcription
             HStack {
-                Text("Relay")
-                    .font(.system(size: 14, weight: .semibold))
+                HStack(spacing: 6) {
+                    Text("Relay")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
                     #if DEBUG
-                    .foregroundStyle(.blue)
-                    #else
-                    .foregroundStyle(.primary)
+                    Text("DEV")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.blue.opacity(0.15), in: Capsule())
                     #endif
+                }
                     .scaleEffect(showSettings || appState.isRecording ? 0.85 : 1, anchor: .leading)
                     .blur(radius: showSettings || appState.isRecording ? 3 : 0)
                     .opacity(showSettings || appState.isRecording ? 0 : 1)
