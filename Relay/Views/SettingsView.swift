@@ -468,8 +468,8 @@ private struct SettingsRow<Content: View>: View {
                 .font(.system(size: 12))
             if let help {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.quaternary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
                     .help(help)
             }
             Spacer()
