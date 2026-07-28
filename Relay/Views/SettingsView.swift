@@ -38,7 +38,11 @@ struct SettingsPage: View {
     private var dictionarySection: some View {
         SettingsSection("Dictionary") {
             DictionaryEditor()
-            SettingsToggle("Learn from corrections", isOn: $appState.learnFromCorrections)
+            SettingsToggle(
+                "Learn from corrections",
+                help: "After auto-paste, Relay checks the field once and adds words you've fixed twice to the Boost vocabulary. Entirely on-device.",
+                isOn: $appState.learnFromCorrections
+            )
         }
     }
 
@@ -153,8 +157,16 @@ struct SettingsPage: View {
                 .labelsHidden()
             }
 
-            SettingsToggle("Max mic volume on record", isOn: $appState.maxMicOnRecord)
-            SettingsToggle("Instant start (keeps mic warm)", isOn: $appState.warmCapturePreRoll)
+            SettingsToggle(
+                "Max mic volume on record",
+                help: "Raises input volume to maximum while recording, then restores your previous level.",
+                isOn: $appState.maxMicOnRecord
+            )
+            SettingsToggle(
+                "Instant start (keeps mic warm)",
+                help: "Keeps the mic armed while idle so recordings include the half-second before you hit the shortcut — first words never get clipped. macOS shows the mic indicator the whole time.",
+                isOn: $appState.warmCapturePreRoll
+            )
             SettingsToggle("Start/stop sounds", isOn: $appState.recordingSounds)
 
             if appState.recordingSounds {
@@ -170,7 +182,11 @@ struct SettingsPage: View {
                     .frame(maxWidth: 140, alignment: .trailing)
                 }
             }
-            SettingsToggle("Duck system audio while recording", isOn: $appState.duckAudioOnRecord)
+            SettingsToggle(
+                "Duck system audio while recording",
+                help: "Lowers output volume during recording so playback doesn't bleed into the mic, then restores it.",
+                isOn: $appState.duckAudioOnRecord
+            )
         }
     }
 
@@ -192,7 +208,11 @@ struct SettingsPage: View {
                     .frame(maxWidth: 180)
                 }
             }
-            SettingsToggle("Capture clipboard on start", isOn: $appState.captureClipboardOnStart)
+            SettingsToggle(
+                "Capture clipboard on start",
+                help: "Whatever is on the clipboard when recording starts is added as a context item.",
+                isOn: $appState.captureClipboardOnStart
+            )
             SettingsToggle("Add screenshots taken while recording", isOn: $appState.captureScreenshotsWhileRecording)
             SettingsToggle("Keep popover pinned", isOn: $appState.pinPopover)
             SettingsToggle("Show recording overlay", isOn: $appState.showRecordingOverlay)
@@ -217,8 +237,16 @@ struct SettingsPage: View {
                 SettingsToggle("Auto-paste to focused input", isOn: $appState.autoPasteAfterCopy)
 
                 if appState.autoPasteAfterCopy {
-                    SettingsToggle("Hold ⇧ to send after paste", isOn: $appState.sendAfterPasteWithShift)
-                    SettingsToggle("Restore clipboard after paste", isOn: $appState.restoreClipboardAfterPaste)
+                    SettingsToggle(
+                        "Hold ⇧ to send after paste",
+                        help: "Holding Shift when the paste lands also presses Return — dictate straight into a chat and send it.",
+                        isOn: $appState.sendAfterPasteWithShift
+                    )
+                    SettingsToggle(
+                        "Restore clipboard after paste",
+                        help: "Puts whatever was on the clipboard before dictation back after the paste lands. Anything you copy in the meantime wins.",
+                        isOn: $appState.restoreClipboardAfterPaste
+                    )
                 }
             }
         }
@@ -246,7 +274,10 @@ struct SettingsPage: View {
                 .labelsHidden()
             }
 
-            SettingsRow("Transcript") {
+            SettingsRow(
+                "Transcript",
+                help: "Raw is verbatim. Clean strips filler words. Formatted also fixes capitalization and punctuation. AI Polish uses Apple's on-device model to resolve self-corrections too — nothing leaves your Mac."
+            ) {
                 Picker("Transcript", selection: $appState.transcriptEnhancement) {
                     // AI Polish only shows where Apple Intelligence is available.
                     ForEach(TranscriptEnhancement.allCases.filter {
@@ -420,17 +451,27 @@ private struct SettingsSection<Content: View>: View {
 
 private struct SettingsRow<Content: View>: View {
     let label: String
+    /// Short explanation shown as a tooltip behind an info icon — for
+    /// settings whose label alone doesn't explain what they do.
+    var help: String?
     @ViewBuilder let content: Content
 
-    init(_ label: String, @ViewBuilder content: () -> Content) {
+    init(_ label: String, help: String? = nil, @ViewBuilder content: () -> Content) {
         self.label = label
+        self.help = help
         self.content = content()
     }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 4) {
             Text(label)
                 .font(.system(size: 12))
+            if let help {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.quaternary)
+                    .help(help)
+            }
             Spacer()
             content
         }
@@ -442,15 +483,17 @@ private struct SettingsRow<Content: View>: View {
 
 private struct SettingsToggle: View {
     let label: String
+    var help: String?
     @Binding var isOn: Bool
 
-    init(_ label: String, isOn: Binding<Bool>) {
+    init(_ label: String, help: String? = nil, isOn: Binding<Bool>) {
         self.label = label
+        self.help = help
         self._isOn = isOn
     }
 
     var body: some View {
-        SettingsRow(label) {
+        SettingsRow(label, help: help) {
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
                 .controlSize(.mini)
