@@ -51,6 +51,7 @@ final class AVAudioEngineCaptureSource: AudioCaptureSource, @unchecked Sendable 
         let engine = AVAudioEngine()
         self.engine = engine
 
+        SystemAudioHelper.ensureInputUnmuted(deviceID: deviceID)
         if let deviceID {
             AudioDeviceManager.setInputDevice(deviceID, on: engine)
         }

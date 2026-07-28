@@ -151,6 +151,8 @@ final class AUHALCaptureSource: AudioCaptureSource, @unchecked Sendable {
     /// Points the (stopped, uninitialized) unit at a device, negotiates a mono
     /// Float32 client format at the device rate, then initializes and starts.
     private func configureAndStartLocked(unit: AudioUnit, deviceID: AudioDeviceID) throws {
+        SystemAudioHelper.ensureInputUnmuted(deviceID: deviceID)
+
         var device = deviceID
         try check(AudioUnitSetProperty(
             unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,

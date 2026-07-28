@@ -67,6 +67,30 @@ enum SystemAudioHelper {
         return status == noErr
     }
 
+    /// A device muted at the CoreAudio level records pure silence with no
+    /// error anywhere. Check and auto-unmute before capturing (some apps and
+    /// utilities leave the input muted behind the user's back).
+    static func ensureInputUnmuted(deviceID: AudioDeviceID? = nil) {
+        guard let deviceID = deviceID ?? defaultInputDevice() else { return }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: kAudioObjectPropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var muted: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &muted) == noErr,
+              muted == 1 else { return }
+
+        var unmuted: UInt32 = 0
+        let status = AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &unmuted)
+        if status == noErr {
+            NSLog("SystemAudioHelper: input device %d was muted at device level - auto-unmuted", deviceID)
+        } else {
+            NSLog("SystemAudioHelper: failed to unmute input device %d (%d)", deviceID, status)
+        }
+    }
+
     // MARK: - Output volume (for ducking during recording)
 
     /// Returns the default output device's AudioObjectID, or `nil` if unavailable.
