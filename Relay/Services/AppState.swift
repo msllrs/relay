@@ -830,22 +830,21 @@ final class AppState: ObservableObject {
                 return
             }
 
-            if let id = voiceNoteID {
-                let markedText = TranscriptEnhancer.enhance(
-                    self.insertRefMarkers(into: transcription, refs: refs),
+            let markedInput = self.insertRefMarkers(into: transcription, refs: refs)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let markedText = await TranscriptEnhancer.enhanceAsync(
+                    markedInput,
                     level: self.transcriptEnhancement
                 )
-                self.stack.update(id: id, textContent: markedText)
-                self.recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: markedText))
-                self.freezeCurrentSession(markedText)
-            } else {
-                let markedText = TranscriptEnhancer.enhance(
-                    self.insertRefMarkers(into: transcription, refs: refs),
-                    level: self.transcriptEnhancement
-                )
-                let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
-                self.stack.add(item)
-                self.recordInHistory(item)
+                if let id = voiceNoteID {
+                    self.stack.update(id: id, textContent: markedText)
+                    self.recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: markedText))
+                } else {
+                    let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
+                    self.stack.add(item)
+                    self.recordInHistory(item)
+                }
                 self.freezeCurrentSession(markedText)
             }
         }

@@ -4,6 +4,7 @@ enum TranscriptEnhancement: String, CaseIterable, Identifiable {
     case off
     case clean
     case formatted
+    case aiPolish
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum TranscriptEnhancement: String, CaseIterable, Identifiable {
         case .off: "Raw"
         case .clean: "Clean"
         case .formatted: "Formatted"
+        case .aiPolish: "AI Polish"
         }
     }
 }
@@ -23,9 +25,22 @@ enum TranscriptEnhancer {
             return text
         case .clean:
             return clean(text)
-        case .formatted:
+        case .formatted, .aiPolish:
             return format(clean(text))
         }
+    }
+
+    /// Async variant: AI Polish runs the on-device Foundation Model, falling
+    /// back to the heuristic Formatted pipeline when unavailable or unsafe.
+    /// The other levels are identical to `enhance(_:level:)`.
+    static func enhanceAsync(_ text: String, level: TranscriptEnhancement) async -> String {
+        guard level == .aiPolish else {
+            return enhance(text, level: level)
+        }
+        if let polished = await FoundationModelsEnhancer.polish(text) {
+            return polished
+        }
+        return enhance(text, level: .formatted)
     }
 
     // MARK: - Clean

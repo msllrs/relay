@@ -237,7 +237,10 @@ struct SettingsPage: View {
 
             SettingsRow("Transcript") {
                 Picker("Transcript", selection: $appState.transcriptEnhancement) {
-                    ForEach(TranscriptEnhancement.allCases) { level in
+                    // AI Polish only shows where Apple Intelligence is available.
+                    ForEach(TranscriptEnhancement.allCases.filter {
+                        $0 != .aiPolish || FoundationModelsEnhancer.isAvailable
+                    }) { level in
                         Text(level.label).tag(level)
                     }
                 }
