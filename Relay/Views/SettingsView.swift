@@ -467,15 +467,49 @@ private struct SettingsRow<Content: View>: View {
             Text(label)
                 .font(.system(size: 12))
             if let help {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .help(help)
+                InfoTip(text: help)
             }
             Spacer()
             content
         }
         .frame(minHeight: 24)
+    }
+}
+
+// MARK: - Info Tip
+
+/// Info icon whose explanation appears on hover after a short beat — the
+/// system tooltip's ~1.5s delay makes the help feel hidden.
+private struct InfoTip: View {
+    let text: String
+    @State private var showTip = false
+    @State private var hoverTask: Task<Void, Never>?
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.system(size: 10))
+            .foregroundStyle(showTip ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .onHover { hovering in
+                hoverTask?.cancel()
+                if hovering {
+                    hoverTask = Task {
+                        // Just enough delay that mousing past doesn't flash tips.
+                        try? await Task.sleep(for: .milliseconds(150))
+                        guard !Task.isCancelled else { return }
+                        showTip = true
+                    }
+                } else {
+                    showTip = false
+                }
+            }
+            .popover(isPresented: $showTip, arrowEdge: .bottom) {
+                Text(text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+                    .frame(width: 240, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
     }
 }
 
