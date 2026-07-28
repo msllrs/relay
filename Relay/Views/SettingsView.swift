@@ -25,12 +25,19 @@ struct SettingsPage: View {
             applicationSection
             afterDictationSection
             promptSection
+            dictionarySection
             integrationSection
             annotationSection
             historySection
             shortcutSection
         }
         .padding(.horizontal, 16)
+    }
+
+    private var dictionarySection: some View {
+        SettingsSection("Dictionary") {
+            DictionaryEditor()
+        }
     }
 
 
@@ -436,6 +443,101 @@ private struct SettingsToggle: View {
                 .controlSize(.mini)
                 .labelsHidden()
         }
+    }
+}
+
+// MARK: - Dictionary Editor
+
+/// Word removal and replacement rules with a live preview. The preview runs
+/// the exact same applier as the transcript pipeline, so what you see is what
+/// dictation does.
+private struct DictionaryEditor: View {
+    @EnvironmentObject var appState: AppState
+    @State private var mode: Mode = .replace
+    @State private var previewInput = ""
+
+    private enum Mode: String, CaseIterable {
+        case remove = "Remove"
+        case replace = "Replace"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Mode", selection: $mode) {
+                ForEach(Mode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            switch mode {
+            case .remove:
+                ForEach($appState.wordRemovals) { $rule in
+                    HStack(spacing: 6) {
+                        Toggle("", isOn: $rule.isEnabled)
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                        TextField("word or regex", text: $rule.pattern)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                        deleteButton { appState.wordRemovals.removeAll { $0.id == rule.id } }
+                    }
+                }
+                addButton("Add removal") {
+                    appState.wordRemovals.append(WordRemovalRule())
+                }
+            case .replace:
+                ForEach($appState.wordRemappings) { $rule in
+                    HStack(spacing: 6) {
+                        Toggle("", isOn: $rule.isEnabled)
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                        TextField("match", text: $rule.match)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                        TextField("replacement", text: $rule.replacement)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+                        deleteButton { appState.wordRemappings.removeAll { $0.id == rule.id } }
+                    }
+                }
+                addButton("Add replacement") {
+                    appState.wordRemappings.append(WordRemappingRule())
+                }
+            }
+
+            TextField("Try it: type here to preview your rules", text: $previewInput)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+            if !previewInput.isEmpty {
+                Text(WordRules.apply(previewInput, removals: appState.wordRemovals, remappings: appState.wordRemappings))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func deleteButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "trash")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func addButton(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: "plus")
+                .font(.system(size: 11))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
     }
 }
 

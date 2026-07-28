@@ -153,6 +153,14 @@ final class AppState: ObservableObject {
     @Published var transcriptEnhancement: TranscriptEnhancement {
         didSet { UserDefaults.standard.set(transcriptEnhancement.rawValue, forKey: "transcriptEnhancement") }
     }
+    /// Custom dictionary: user-defined filler removals and word replacements,
+    /// applied to every finished transcript before enhancement.
+    @Published var wordRemovals: [WordRemovalRule] = WordRules.loadRemovals() {
+        didSet { WordRules.save(removals: wordRemovals) }
+    }
+    @Published var wordRemappings: [WordRemappingRule] = WordRules.loadRemappings() {
+        didSet { WordRules.save(remappings: wordRemappings) }
+    }
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")
@@ -830,7 +838,11 @@ final class AppState: ObservableObject {
                 return
             }
 
-            let markedInput = self.insertRefMarkers(into: transcription, refs: refs)
+            let markedInput = WordRules.apply(
+                self.insertRefMarkers(into: transcription, refs: refs),
+                removals: self.wordRemovals,
+                remappings: self.wordRemappings
+            )
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let markedText = await TranscriptEnhancer.enhanceAsync(
