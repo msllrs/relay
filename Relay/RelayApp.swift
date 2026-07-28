@@ -141,7 +141,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
         toggle.target = self
         menu.addItem(toggle)
+
+        let pasteLast = NSMenuItem(
+            title: "Paste Last Transcript",
+            action: #selector(pasteLastTranscriptFromDock),
+            keyEquivalent: ""
+        )
+        pasteLast.target = self
+        menu.addItem(pasteLast)
         return menu
+    }
+
+    @objc private func pasteLastTranscriptFromDock() {
+        appState.pasteLastTranscript()
     }
 
     @objc private func toggleRecordingFromDock() {

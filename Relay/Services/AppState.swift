@@ -13,6 +13,8 @@ struct CaptureHistoryEntry: Identifiable, Equatable {
     let textContent: String?
     let imagePath: String?
     let timestamp: Date
+    /// For voice notes: the app that was focused when dictation happened.
+    var sourceAppName: String?
 }
 
 @MainActor
@@ -815,8 +817,21 @@ final class AppState: ObservableObject {
             } else {
                 startDictation(installPushToTalkMonitor: false)
             }
+        case "paste-last-transcript":
+            pasteLastTranscript()
         default:
             NSLog("Unknown URL command: %@", url.absoluteString)
+        }
+    }
+
+    /// Re-copy the most recent dictation and paste it into the focused input.
+    /// The recovery path when a paste failed or landed in the wrong window.
+    func pasteLastTranscript() {
+        guard let entry = captureHistory.first(where: { $0.contentType == .voiceNote }),
+              let text = entry.textContent, !text.isEmpty else { return }
+        writeToClipboard(text)
+        if AXIsProcessTrusted() {
+            autoPasteToFocusedInput()
         }
     }
 
@@ -1020,7 +1035,8 @@ final class AppState: ObservableObject {
             preview: preview,
             textContent: item.textContent,
             imagePath: item.imagePath,
-            timestamp: item.timestamp
+            timestamp: item.timestamp,
+            sourceAppName: item.contentType == .voiceNote ? lastExternalApp?.localizedName : nil
         )
         captureHistory.insert(entry, at: 0)
         if captureHistory.count > 20 {

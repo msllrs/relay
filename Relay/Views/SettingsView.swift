@@ -642,6 +642,12 @@ private struct CaptureHistoryRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(hovered ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                if let app = entry.sourceAppName {
+                    Text("→ \(app)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 4)
                 Image(systemName: "checkmark")
                     .font(.system(size: 9, weight: .semibold))
