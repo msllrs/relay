@@ -6,23 +6,15 @@ import Foundation
 import FluidAudio
 #endif
 
-/// Wrapper to shuttle AVAudioPCMBuffer across isolation boundaries.
-/// The wrapped buffer must not be accessed from the sending context after wrapping.
-private struct SendableBuffer: @unchecked Sendable {
-    let buffer: AVAudioPCMBuffer
-}
-
 /// FluidAudio/Parakeet-based transcription engine with streaming support.
 final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     #if canImport(FluidAudio)
     private var loadedModels: AsrModels?
     private var streamingManager: StreamingAsrManager?
     #endif
-    private var audioEngine: AVAudioEngine?
+    private var capture: (any AudioCaptureSource)?
     private var isStreamingFlag = false
     private var pollingTask: Task<Void, Never>?
-    /// Kept for mid-session capture restarts on device changes.
-    private var onAudioLevel: (@Sendable (Float) -> Void)?
 
     var isAvailable: Bool {
         #if canImport(FluidAudio)
@@ -91,65 +83,23 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
             }
         }
 
-        self.onAudioLevel = onAudioLevel
-        try startAudioCapture(inputDeviceID: inputDeviceID, streaming: streaming, onAudioLevel: onAudioLevel)
+        let captureSource = AudioCaptureSourceFactory.make()
+        self.capture = captureSource
+        try captureSource.start(deviceID: inputDeviceID, onBuffer: { [weak self] buffer in
+            guard let self, self.isStreamingFlag else { return }
+            let wrapped = UncheckedSendableBuffer(buffer: buffer)
+            Task { await streaming.streamAudio(wrapped.buffer) }
+        }, onLevel: onAudioLevel)
         #else
         throw SpeechEngineError.engineUnavailable
         #endif
     }
 
-    #if canImport(FluidAudio)
-    /// Set up our own AVAudioEngine to capture mic audio, compute levels
-    /// for the waveform, and feed buffers to FluidAudio.
-    private func startAudioCapture(inputDeviceID: AudioDeviceID?, streaming: StreamingAsrManager, onAudioLevel: @escaping @Sendable (Float) -> Void) throws {
-        let engine = AVAudioEngine()
-        self.audioEngine = engine
-
-        if let deviceID = inputDeviceID {
-            AudioDeviceManager.setInputDevice(deviceID, on: engine)
-        }
-
-        // Pass nil format to let Core Audio negotiate correctly (AirPods, device switching)
-        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
-            guard self?.audioEngine != nil else { return }
-
-            // Compute RMS for waveform visualisation
-            if let channelData = buffer.floatChannelData?[0] {
-                let frames = Int(buffer.frameLength)
-                var sum: Float = 0
-                for i in 0..<frames { sum += channelData[i] * channelData[i] }
-                let rms = sqrt(sum / max(Float(frames), 1))
-                onAudioLevel(rms)
-            }
-
-            // Feed audio to FluidAudio for transcription.
-            // Copy into a Sendable wrapper so it can cross the actor boundary.
-            guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else { return }
-            copy.frameLength = buffer.frameLength
-            if let src = buffer.floatChannelData, let dst = copy.floatChannelData {
-                for ch in 0..<Int(buffer.format.channelCount) {
-                    dst[ch].update(from: src[ch], count: Int(buffer.frameLength))
-                }
-            }
-            let wrapped = SendableBuffer(buffer: copy)
-            Task { await streaming.streamAudio(wrapped.buffer) }
-        }
-
-        engine.prepare()
-        try engine.start()
-    }
-    #endif
-
-    /// Rebuild capture on the new device; the streaming manager and its
+    /// Move capture to the new device; the streaming manager and its
     /// transcript carry on untouched.
     func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {
-        #if canImport(FluidAudio)
-        guard isStreamingFlag, let streaming = streamingManager, let onAudioLevel else { return }
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-        try? startAudioCapture(inputDeviceID: inputDeviceID, streaming: streaming, onAudioLevel: onAudioLevel)
-        #endif
+        guard isStreamingFlag else { return }
+        capture?.switchDevice(to: inputDeviceID)
     }
 
     func stopAndTranscribe() async throws -> String {
@@ -158,9 +108,8 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         pollingTask?.cancel()
         pollingTask = nil
 
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        capture?.stop()
+        capture = nil
 
         guard let streaming = streamingManager else {
             throw SpeechEngineError.transcriptionFailed("No recording available")
@@ -180,9 +129,8 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         pollingTask?.cancel()
         pollingTask = nil
 
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        capture?.stop()
+        capture = nil
 
         #if canImport(FluidAudio)
         await streamingManager?.cancel()

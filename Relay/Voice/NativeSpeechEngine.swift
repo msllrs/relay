@@ -3,16 +3,14 @@ import Foundation
 import Speech
 import Synchronization
 
-/// Uses macOS built-in SFSpeechRecognizer + AVAudioEngine for on-device transcription.
+/// Uses macOS built-in SFSpeechRecognizer for on-device transcription.
 final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     private let speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var audioEngine: AVAudioEngine?
+    private var capture: (any AudioCaptureSource)?
     private let transcription = Mutex("")
     private var completionContinuation: CheckedContinuation<String, any Error>?
-    /// Kept for mid-session capture restarts on device changes.
-    private var onAudioLevel: (@Sendable (Float) -> Void)?
 
     var isAvailable: Bool {
         guard let recognizer = speechRecognizer else { return false }
@@ -55,10 +53,29 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         request.addsPunctuation = true
 
         self.recognitionRequest = request
-        self.onAudioLevel = onAudioLevel
         transcription.withLock { $0 = "" }
 
-        try startAudioCapture(inputDeviceID: inputDeviceID, request: request, onAudioLevel: onAudioLevel)
+        // Skip initial buffers to avoid hardware startup transients that
+        // SFSpeechRecognizer can misinterpret as speech (e.g. "no").
+        let buffersToSkip = Mutex(3)
+        // SFSpeechAudioBufferRecognitionRequest isn't marked Sendable but append(_:)
+        // is safe to call from the capture queue (it's fed from audio threads by design).
+        struct SendableRequest: @unchecked Sendable { let request: SFSpeechAudioBufferRecognitionRequest }
+        let sendableRequest = SendableRequest(request: request)
+        let captureSource = AudioCaptureSourceFactory.make()
+        self.capture = captureSource
+        try captureSource.start(deviceID: inputDeviceID, onBuffer: { buffer in
+            let skip = buffersToSkip.withLock { remaining -> Bool in
+                if remaining > 0 {
+                    remaining -= 1
+                    return true
+                }
+                return false
+            }
+            if !skip {
+                sendableRequest.request.append(buffer)
+            }
+        }, onLevel: onAudioLevel)
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
@@ -84,53 +101,11 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         }
     }
 
-    /// Build a fresh AVAudioEngine and tap feeding the given recognition request.
-    /// Fresh engine each (re)start so it binds the current default input device.
-    private func startAudioCapture(inputDeviceID: AudioDeviceID?, request: SFSpeechAudioBufferRecognitionRequest, onAudioLevel: @escaping @Sendable (Float) -> Void) throws {
-        let engine = AVAudioEngine()
-        self.audioEngine = engine
-
-        if let deviceID = inputDeviceID {
-            AudioDeviceManager.setInputDevice(deviceID, on: engine)
-        }
-
-        // Pass nil format to let Core Audio negotiate the correct format.
-        // Skip initial buffers to avoid hardware startup transients that
-        // SFSpeechRecognizer can misinterpret as speech (e.g. "no").
-        var buffersToSkip = 3
-        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
-            if buffersToSkip > 0 {
-                buffersToSkip -= 1
-            } else {
-                request.append(buffer)
-            }
-
-            // Compute RMS for audio level metering
-            guard let channelData = buffer.floatChannelData else { return }
-            let frames = Int(buffer.frameLength)
-            guard frames > 0 else { return }
-            let samples = channelData[0]
-            var sum: Float = 0
-            for i in 0..<frames {
-                let s = samples[i]
-                sum += s * s
-            }
-            let rms = sqrtf(sum / Float(frames))
-            onAudioLevel(rms)
-        }
-
-        engine.prepare()
-        try engine.start()
-    }
-
-    /// Rebuild the audio engine on the new device, keeping the recognition
-    /// request (and therefore the transcript so far) alive.
+    /// Move capture to the new device, keeping the recognition request (and
+    /// therefore the transcript so far) alive.
     func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {
-        guard let request = recognitionRequest, let onAudioLevel else { return }
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-        try? startAudioCapture(inputDeviceID: inputDeviceID, request: request, onAudioLevel: onAudioLevel)
+        guard recognitionRequest != nil else { return }
+        capture?.switchDevice(to: inputDeviceID)
     }
 
     /// Poll until the deadline; resolve with the latest partial only if the
@@ -149,9 +124,8 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     }
 
     func stopAndTranscribe() async throws -> String {
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        capture?.stop()
+        capture = nil
         recognitionRequest?.endAudio()
 
         let current = transcription.withLock { $0 }
@@ -180,9 +154,8 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
     }
 
     func cancel() async {
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        capture?.stop()
+        capture = nil
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil

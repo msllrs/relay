@@ -7,20 +7,18 @@ import WhisperKit
 #endif
 
 /// WhisperKit-based transcription engine.
-/// Uses our own AVAudioEngine for mic capture (bypassing WhisperKit's AudioStreamTranscriber
+/// Uses our own capture source for mic audio (bypassing WhisperKit's AudioStreamTranscriber
 /// which crashes on macOS 26 due to a bug in AVAudioApplication.requestRecordPermission
 /// when called from an actor context).
 final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
     #if canImport(WhisperKit)
     private var whisperKit: WhisperKit?
     #endif
-    private var audioEngine: AVAudioEngine?
+    private var capture: (any AudioCaptureSource)?
     /// Accumulated 16 kHz mono float samples for transcription.
     private var audioSamples: [Float] = []
     private var isRecordingFlag = false
     private var transcriptionTask: Task<Void, Never>?
-    /// Kept for mid-session capture restarts on device changes.
-    private var onAudioLevel: (@Sendable (Float) -> Void)?
 
     var isAvailable: Bool {
         #if canImport(WhisperKit)
@@ -58,9 +56,16 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
 
         audioSamples = []
         isRecordingFlag = true
-        self.onAudioLevel = onAudioLevel
 
-        try startAudioCapture(inputDeviceID: inputDeviceID, onAudioLevel: onAudioLevel)
+        let capture = AudioCaptureSourceFactory.make()
+        self.capture = capture
+        try capture.start(deviceID: inputDeviceID, onBuffer: { [weak self] buffer in
+            guard let self, self.isRecordingFlag else { return }
+            if let floats = buffer.floatChannelData?[0] {
+                let count = Int(buffer.frameLength)
+                self.audioSamples.append(contentsOf: UnsafeBufferPointer(start: floats, count: count))
+            }
+        }, onLevel: onAudioLevel)
 
         // Periodic transcription loop in background
         let kit = whisperKit
@@ -91,85 +96,11 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         #endif
     }
 
-    /// Build a fresh AVAudioEngine + 16 kHz converter for the current device
-    /// and append converted samples to `audioSamples`. Rebuilt per (re)start
-    /// because the hardware sample rate differs between devices.
-    private func startAudioCapture(inputDeviceID: AudioDeviceID?, onAudioLevel: @escaping @Sendable (Float) -> Void) throws {
-        let engine = AVAudioEngine()
-        self.audioEngine = engine
-
-        if let deviceID = inputDeviceID {
-            AudioDeviceManager.setInputDevice(deviceID, on: engine)
-        }
-
-        let hardwareRate = engine.inputNode.inputFormat(forBus: 0).sampleRate
-        let inputFormat = engine.inputNode.outputFormat(forBus: 0)
-
-        // Create converter to 16kHz mono (what WhisperKit expects)
-        guard let nodeFormat = AVAudioFormat(
-            commonFormat: inputFormat.commonFormat,
-            sampleRate: hardwareRate,
-            channels: inputFormat.channelCount,
-            interleaved: inputFormat.isInterleaved
-        ) else {
-            throw SpeechEngineError.recordingFailed
-        }
-
-        guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 16000,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw SpeechEngineError.recordingFailed
-        }
-
-        guard let converter = AVAudioConverter(from: nodeFormat, to: targetFormat) else {
-            throw SpeechEngineError.recordingFailed
-        }
-
-        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: nodeFormat) { [weak self] buffer, _ in
-            guard let self, self.isRecordingFlag else { return }
-
-            // Compute RMS for waveform
-            if let channelData = buffer.floatChannelData?[0] {
-                let frames = Int(buffer.frameLength)
-                var sum: Float = 0
-                for i in 0..<frames { sum += channelData[i] * channelData[i] }
-                let rms = sqrt(sum / max(Float(frames), 1))
-                onAudioLevel(rms)
-            }
-
-            // Resample to 16kHz mono
-            let ratio = 16000.0 / hardwareRate
-            let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-            guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount) else { return }
-
-            var error: NSError?
-            converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-
-            if let floats = outputBuffer.floatChannelData?[0] {
-                let count = Int(outputBuffer.frameLength)
-                let samples = Array(UnsafeBufferPointer(start: floats, count: count))
-                self.audioSamples.append(contentsOf: samples)
-            }
-        }
-
-        engine.prepare()
-        try engine.start()
-    }
-
-    /// Rebuild capture on the new device; accumulated samples and the
+    /// Move capture to the new device; accumulated samples and the
     /// transcription loop carry on untouched.
     func restartAudioCapture(inputDeviceID: AudioDeviceID?) async {
-        guard isRecordingFlag, let onAudioLevel else { return }
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-        try? startAudioCapture(inputDeviceID: inputDeviceID, onAudioLevel: onAudioLevel)
+        guard isRecordingFlag else { return }
+        capture?.switchDevice(to: inputDeviceID)
     }
 
     func stopAndTranscribe() async throws -> String {
@@ -178,9 +109,8 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         transcriptionTask?.cancel()
         transcriptionTask = nil
 
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        capture?.stop()
+        capture = nil
 
         guard let whisperKit else {
             throw SpeechEngineError.transcriptionFailed("No recording available")
@@ -209,9 +139,8 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         isRecordingFlag = false
         transcriptionTask?.cancel()
         transcriptionTask = nil
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        capture?.stop()
+        capture = nil
         audioSamples = []
     }
 }
