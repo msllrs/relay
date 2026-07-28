@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreAudio
 import Foundation
+import Synchronization
 
 #if canImport(FluidAudio)
 import FluidAudio
@@ -15,6 +16,8 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     private var capture: (any AudioCaptureSource)?
     private var isStreamingFlag = false
     private var pollingTask: Task<Void, Never>?
+    /// 16 kHz samples streamed this session, for short-clip padding.
+    private let streamedSamples = Mutex(0)
 
     var isAvailable: Bool {
         #if canImport(FluidAudio)
@@ -83,10 +86,12 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
             }
         }
 
+        streamedSamples.withLock { $0 = 0 }
         let captureSource = AudioCaptureSourceFactory.make()
         self.capture = captureSource
         try captureSource.start(deviceID: inputDeviceID, onBuffer: { [weak self] buffer in
             guard let self, self.isStreamingFlag else { return }
+            self.streamedSamples.withLock { $0 += Int(buffer.frameLength) }
             let wrapped = UncheckedSendableBuffer(buffer: buffer)
             Task { await streaming.streamAudio(wrapped.buffer) }
         }, onLevel: onAudioLevel)
@@ -113,6 +118,21 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
 
         guard let streaming = streamingManager else {
             throw SpeechEngineError.transcriptionFailed("No recording available")
+        }
+
+        // Parakeet's TDT decoder produces empty or junk output on clips shorter
+        // than its 1.5s chunk window — exactly what a quick tap-to-talk yields.
+        // Pad with trailing silence up to the minimum before finishing.
+        let minimumSamples = 24_000 // 1.5s at 16 kHz
+        let streamed = streamedSamples.withLock { $0 }
+        if streamed > 0, streamed < minimumSamples {
+            let padFrames = AVAudioFrameCount(minimumSamples - streamed)
+            if let silence = AVAudioPCMBuffer(pcmFormat: PCM16kMonoConverter.makeTargetFormat(), frameCapacity: padFrames),
+               let data = silence.floatChannelData?[0] {
+                data.initialize(repeating: 0, count: Int(padFrames))
+                silence.frameLength = padFrames
+                await streaming.streamAudio(silence)
+            }
         }
 
         let finalText = try await streaming.finish()
