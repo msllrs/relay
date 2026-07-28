@@ -22,6 +22,7 @@ struct SettingsPage: View {
     private var sectionsContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             voiceSection
+            shortcutSection
             behaviorSection
             applicationSection
             afterDictationSection
@@ -30,7 +31,6 @@ struct SettingsPage: View {
             integrationSection
             annotationSection
             historySection
-            shortcutSection
         }
         .padding(.horizontal, 16)
     }
