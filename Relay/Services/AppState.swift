@@ -93,6 +93,12 @@ final class AppState: ObservableObject {
     @Published var sendAfterPasteWithShift: Bool {
         didSet { UserDefaults.standard.set(sendAfterPasteWithShift, forKey: "sendAfterPasteWithShift") }
     }
+    /// Opt-in: put whatever was on the clipboard before dictation back after
+    /// the auto-paste lands. Off by default — keeping the prompt on the
+    /// clipboard is Relay's normal contract.
+    @Published var restoreClipboardAfterPaste: Bool {
+        didSet { UserDefaults.standard.set(restoreClipboardAfterPaste, forKey: "restoreClipboardAfterPaste") }
+    }
     @Published var pinPopover: Bool {
         didSet { UserDefaults.standard.set(pinPopover, forKey: "pinPopover") }
     }
@@ -319,6 +325,7 @@ final class AppState: ObservableObject {
         }
         self.autoPasteAfterCopy = UserDefaults.standard.bool(forKey: "autoPasteAfterCopy")
         self.sendAfterPasteWithShift = UserDefaults.standard.bool(forKey: "sendAfterPasteWithShift")
+        self.restoreClipboardAfterPaste = UserDefaults.standard.bool(forKey: "restoreClipboardAfterPaste")
         self.pinPopover = UserDefaults.standard.bool(forKey: "pinPopover")
         self.showInDock = UserDefaults.standard.bool(forKey: "showInDock")
         self.startRecordingOnMenubarClick = UserDefaults.standard.bool(forKey: "startRecordingOnMenubarClick")
@@ -840,10 +847,21 @@ final class AppState: ObservableObject {
         stopMonitoring()
     }
 
+    /// Session ID of the most recent clipboard write, for restore ownership checks.
+    private var pasteSessionID: String = ""
+    /// Clipboard contents captured just before an auto-paste write, restored
+    /// after the paste lands when `restoreClipboardAfterPaste` is on.
+    private var preWriteSnapshot: PasteboardHelper.Snapshot?
+
     private func writeToClipboard(_ text: String) {
+        if restoreClipboardAfterPaste, autoCopy, autoPasteAfterCopy {
+            preWriteSnapshot = PasteboardHelper.snapshot()
+        }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
+        pasteSessionID = UUID().uuidString
         pasteboard.setString(text, forType: .string)
+        pasteboard.setString(pasteSessionID, forType: PasteboardHelper.sessionMarkerType)
         lastWrittenChangeCount = pasteboard.changeCount
     }
 
@@ -1123,6 +1141,11 @@ final class AppState: ObservableObject {
             // Wait for focus to return to the previous app
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled, let self else { return }
+            // Make sure the pasteboard server has published our write before
+            // any synthesized ⌘V can fire — pasting stale contents otherwise.
+            if let target = self.lastWrittenChangeCount {
+                await PasteboardHelper.waitForCommit(target: target)
+            }
             let text = NSPasteboard.general.string(forType: .string) ?? ""
             if text.isEmpty || !Self.insertTextViaAccessibility(text) {
                 self.simulatePaste()
@@ -1138,6 +1161,25 @@ final class AppState: ObservableObject {
                 guard !Task.isCancelled else { return }
                 self.simulateReturn()
             }
+            self.restoreClipboardIfRequested()
+        }
+    }
+
+    /// Put the pre-dictation clipboard back after the paste has landed —
+    /// but only if the pasteboard still carries our session marker. If the
+    /// user copied something new while the paste was in flight, theirs wins.
+    private func restoreClipboardIfRequested() {
+        guard restoreClipboardAfterPaste, let snapshot = preWriteSnapshot else { return }
+        preWriteSnapshot = nil
+        let sessionID = pasteSessionID
+        Task { [weak self] in
+            // Give slower apps a window to read the pasted text before we
+            // swap the previous contents back in.
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self, !Task.isCancelled else { return }
+            guard PasteboardHelper.carriesSession(sessionID) else { return }
+            // Skip the monitor's next poll so the restore isn't re-captured.
+            self.lastWrittenChangeCount = PasteboardHelper.restore(snapshot)
         }
     }
 

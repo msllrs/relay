@@ -206,6 +206,7 @@ struct SettingsPage: View {
 
                 if appState.autoPasteAfterCopy {
                     SettingsToggle("Hold ⇧ to send after paste", isOn: $appState.sendAfterPasteWithShift)
+                    SettingsToggle("Restore clipboard after paste", isOn: $appState.restoreClipboardAfterPaste)
                 }
             }
         }
