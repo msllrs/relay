@@ -130,12 +130,13 @@ struct SettingsPage: View {
         SettingsSection("Voice") {
             SettingsRow("Engine") {
                 HStack(spacing: 6) {
+                    // Menu picker, not segmented — four engines crush the row
+                    // label into wrapping at this popover width.
                     Picker("Engine", selection: $voiceManager.selectedEngineType) {
                         ForEach(SpeechEngineType.availableCases) { engine in
                             Text(engine.label).tag(engine)
                         }
                     }
-                    .pickerStyle(.segmented)
                     .labelsHidden()
                     .disabled(voiceManager.isRecording)
 
