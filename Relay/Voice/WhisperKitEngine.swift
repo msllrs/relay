@@ -70,8 +70,9 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
 
         // Periodic transcription loop in background
         let kit = whisperKit
+        let decodingOptions = makeDecodingOptions()
         transcriptionTask = Task.detached { [weak self] in
-            let options = DecodingOptions(language: "en", skipSpecialTokens: true, withoutTimestamps: true)
+            let options = decodingOptions
             while self?.isRecordingFlag == true {
                 try? await Task.sleep(nanoseconds: 1_500_000_000) // every 1.5s
                 guard let self = self, self.isRecordingFlag else { break }
@@ -96,6 +97,25 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         throw SpeechEngineError.engineUnavailable
         #endif
     }
+
+    #if canImport(WhisperKit)
+    /// Seed the decoder with the user's vocabulary as a glossary prompt so
+    /// names and jargon transcribe correctly. Prompt tokens condition the
+    /// decoder without appearing in output.
+    private func makeDecodingOptions() -> DecodingOptions {
+        var options = DecodingOptions(language: "en", skipSpecialTokens: true, withoutTimestamps: true)
+        let terms = VocabularyStore.load()
+        if !terms.isEmpty, let tokenizer = whisperKit?.tokenizer {
+            let prompt = " Glossary: \(terms.joined(separator: ", "))."
+            let tokens = tokenizer.encode(text: prompt)
+                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+            if !tokens.isEmpty {
+                options.promptTokens = tokens
+            }
+        }
+        return options
+    }
+    #endif
 
     /// Move capture to the new device; accumulated samples and the
     /// transcription loop carry on untouched.
@@ -124,7 +144,7 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
             return ""
         }
 
-        let options = DecodingOptions(language: "en", skipSpecialTokens: true, withoutTimestamps: true)
+        let options = makeDecodingOptions()
         let results: [TranscriptionResult] = try await whisperKit.transcribe(
             audioArray: samples,
             decodeOptions: options

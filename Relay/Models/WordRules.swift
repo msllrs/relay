@@ -19,6 +19,21 @@ struct WordRemappingRule: Codable, Identifiable, Equatable {
     var replacement = ""
 }
 
+/// Words and phrases the speech engines should be biased toward recognizing
+/// (names, jargon, product terms). Parakeet uses FluidAudio's decode-time
+/// vocabulary boosting; Whisper gets them as a glossary prompt.
+enum VocabularyStore {
+    static func load() -> [String] {
+        (UserDefaults.standard.stringArray(forKey: "customVocabularyTerms") ?? [])
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func save(_ terms: [String]) {
+        UserDefaults.standard.set(terms, forKey: "customVocabularyTerms")
+    }
+}
+
 enum WordRules {
     static let defaultRemovals = ["uh+", "um+", "er+", "hm+"].map {
         WordRemovalRule(isEnabled: false, pattern: $0)

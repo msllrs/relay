@@ -459,6 +459,7 @@ private struct DictionaryEditor: View {
     private enum Mode: String, CaseIterable {
         case remove = "Remove"
         case replace = "Replace"
+        case boost = "Boost"
     }
 
     var body: some View {
@@ -507,6 +508,32 @@ private struct DictionaryEditor: View {
                 }
                 addButton("Add replacement") {
                     appState.wordRemappings.append(WordRemappingRule())
+                }
+            case .boost:
+                Text("Names and jargon the speech engines should recognize.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                ForEach(appState.vocabularyTerms.indices, id: \.self) { index in
+                    HStack(spacing: 6) {
+                        TextField("term", text: Binding(
+                            get: { appState.vocabularyTerms.indices.contains(index) ? appState.vocabularyTerms[index] : "" },
+                            set: { newValue in
+                                if appState.vocabularyTerms.indices.contains(index) {
+                                    appState.vocabularyTerms[index] = newValue
+                                }
+                            }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        deleteButton {
+                            if appState.vocabularyTerms.indices.contains(index) {
+                                appState.vocabularyTerms.remove(at: index)
+                            }
+                        }
+                    }
+                }
+                addButton("Add term") {
+                    appState.vocabularyTerms.append("")
                 }
             }
 

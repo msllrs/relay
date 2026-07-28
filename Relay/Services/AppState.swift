@@ -161,6 +161,10 @@ final class AppState: ObservableObject {
     @Published var wordRemappings: [WordRemappingRule] = WordRules.loadRemappings() {
         didSet { WordRules.save(remappings: wordRemappings) }
     }
+    /// Terms the speech engines are biased toward recognizing.
+    @Published var vocabularyTerms: [String] = VocabularyStore.load() {
+        didSet { VocabularyStore.save(vocabularyTerms) }
+    }
     @Published var selectedInputDeviceID: UInt32 {
         didSet {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")

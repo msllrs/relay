@@ -51,6 +51,11 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
+        // Bias recognition toward the user's vocabulary (names, jargon).
+        let vocabulary = VocabularyStore.load()
+        if !vocabulary.isEmpty {
+            request.contextualStrings = vocabulary
+        }
 
         self.recognitionRequest = request
         transcription.withLock { $0 = "" }

@@ -12,6 +12,8 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
     #if canImport(FluidAudio)
     private var loadedModels: AsrModels?
     private var streamingManager: StreamingAsrManager?
+    /// CTC keyword-spotter models backing vocabulary boosting; cached across sessions.
+    private var ctcModels: CtcModels?
     #endif
     private var capture: (any AudioCaptureSource)?
     private var isStreamingFlag = false
@@ -62,6 +64,7 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         self.isStreamingFlag = true
 
         try await streaming.start(models: models, source: .microphone)
+        await configureVocabularyBoostingIfPossible(streaming)
 
         // Poll the actor's transcript properties for updates (more reliable than
         // AsyncStream which can silently drop the continuation across actor hops).
@@ -107,6 +110,36 @@ final class FluidAudioEngine: SpeechEngine, @unchecked Sendable {
         throw SpeechEngineError.engineUnavailable
         #endif
     }
+
+    #if canImport(FluidAudio)
+    /// Bias recognition toward the user's vocabulary terms. The CTC spotter
+    /// models are an extra download: boost immediately when they're cached,
+    /// otherwise fetch them in the background so the next session has them —
+    /// never block a recording start on a download.
+    private func configureVocabularyBoostingIfPossible(_ streaming: StreamingAsrManager) async {
+        let terms = VocabularyStore.load()
+        guard !terms.isEmpty else { return }
+
+        if ctcModels == nil {
+            guard CtcModels.modelsExist(at: CtcModels.defaultCacheDirectory()) else {
+                NSLog("FluidAudioEngine: vocabulary boost models not cached; downloading for next session")
+                Task.detached(priority: .utility) {
+                    _ = try? await CtcModels.download()
+                }
+                return
+            }
+            ctcModels = try? await CtcModels.downloadAndLoad()
+        }
+        guard let ctcModels else { return }
+
+        do {
+            let vocabulary = CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) })
+            try await streaming.configureVocabularyBoosting(vocabulary: vocabulary, ctcModels: ctcModels)
+        } catch {
+            NSLog("FluidAudioEngine: vocabulary boosting failed: %@", error.localizedDescription)
+        }
+    }
+    #endif
 
     /// Move capture to the new device; the streaming manager and its
     /// transcript carry on untouched.
