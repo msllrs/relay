@@ -63,6 +63,11 @@ mkdir -p "$APP_DIR/Resources"
 
 cp ".build/${CONFIG}/Relay" "$APP_DIR/MacOS/Relay"
 
+# Bundle the MCP server so Claude Code integration needs no Node install.
+# It lives next to the main binary; register it in .mcp.json as
+# <app>/Contents/MacOS/relay-mcp-server.
+cp ".build/${CONFIG}/relay-mcp-server" "$APP_DIR/MacOS/relay-mcp-server"
+
 # Copy asset bundle if it exists
 if [ -d ".build/${CONFIG}/Relay_Relay.bundle" ]; then
     cp -R ".build/${CONFIG}/Relay_Relay.bundle" "$APP_DIR/Resources/"
@@ -169,6 +174,11 @@ if $NOTARIZE; then
         echo "Signed Sparkle.framework"
     fi
 
+    # Sign the bundled MCP server first — nested executables need their own
+    # signature; signing the bundle only covers the main binary.
+    codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
+        "$APP_DIR/MacOS/relay-mcp-server"
+
     # Sign the main binary with hardened runtime + timestamp (required for notarization)
     codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp \
         --entitlements /tmp/relay-entitlements.plist \
@@ -245,11 +255,15 @@ else
     # identity and persists them across rebuilds; ad-hoc signatures change every
     # build and never reliably land a row in the permission list. Falls back to
     # ad-hoc if the cert isn't in the keychain.
+    # Sign the MCP server before the main binary — signing Relay seals the
+    # bundle, so touching nested code afterwards invalidates the signature.
     if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGNING_IDENTITY"; then
+        codesign --force --sign "$SIGNING_IDENTITY" "$APP_DIR/MacOS/relay-mcp-server"
         codesign --force --sign "$SIGNING_IDENTITY" \
             --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
     else
         echo "WARNING: Developer ID cert not found — falling back to ad-hoc (Screen Recording grant may not persist)"
+        codesign --force --sign - "$APP_DIR/MacOS/relay-mcp-server"
         codesign --force --sign - --entitlements /tmp/relay-entitlements.plist "$APP_DIR/MacOS/Relay"
     fi
     codesign --verify --verbose=2 "$APP_DIR/MacOS/Relay" || echo "WARNING: signature verification failed"

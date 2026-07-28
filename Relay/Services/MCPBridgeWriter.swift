@@ -24,6 +24,10 @@ final class MCPBridgeWriter {
         bridgeDirectory.appendingPathComponent("signal", isDirectory: true)
     }()
 
+    private static let queueDirectory: URL = {
+        bridgeDirectory.appendingPathComponent("queue", isDirectory: true)
+    }()
+
     init(appState: AppState) {
         self.appState = appState
     }
@@ -47,10 +51,11 @@ final class MCPBridgeWriter {
             .sink { [weak self] _ in self?.scheduleWrite() }
             .store(in: &cancellables)
 
-        // Poll for signal files from the MCP server
+        // Poll for signal files and queued items from the MCP server
         signalTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.checkSignals()
+                self?.consumeQueue()
             }
         }
 
@@ -78,6 +83,32 @@ final class MCPBridgeWriter {
 
         guard let appState, appState.isRecording else { return }
         appState.finishDictationAndStop()
+    }
+
+    // MARK: - Queue Handling
+
+    /// Consume queued items dropped by the MCP server (relay_add_context) and
+    /// push them onto the stack. Files are named with a leading timestamp, so
+    /// sorting by filename preserves the order they were queued in.
+    private func consumeQueue() {
+        guard let appState,
+              let filenames = try? FileManager.default.contentsOfDirectory(atPath: Self.queueDirectory.path),
+              !filenames.isEmpty
+        else { return }
+
+        for filename in filenames.sorted() where filename.hasSuffix(".json") {
+            let fileURL = Self.queueDirectory.appendingPathComponent(filename)
+            defer { try? FileManager.default.removeItem(at: fileURL) }
+
+            guard let data = try? Data(contentsOf: fileURL),
+                  let payload = try? JSONDecoder().decode(QueuedItemPayload.self, from: data),
+                  !payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { continue }
+
+            let contentType = payload.type.flatMap(ContentType.init(rawValue:))
+                ?? ContentClassifier.classify(text: payload.text)
+            appState.stack.add(ClipboardItem(contentType: contentType, textContent: payload.text))
+        }
     }
 
     // MARK: - Private
@@ -221,6 +252,11 @@ final class MCPBridgeWriter {
             let voiceNotePosition: String
             let transcriptEnhancement: String
         }
+    }
+
+    private struct QueuedItemPayload: Decodable {
+        let text: String
+        let type: String?
     }
 
     private struct StatusPayload: Codable {

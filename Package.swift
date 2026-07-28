@@ -8,12 +8,14 @@ let package = Package(
         .macOS(.v15)
     ],
     products: [
-        .executable(name: "Relay", targets: ["Relay"])
+        .executable(name: "Relay", targets: ["Relay"]),
+        .executable(name: "relay-mcp-server", targets: ["RelayMCPServer"])
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.0.0"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.9.0"),
     ],
     targets: [
         .executableTarget(
@@ -32,6 +34,13 @@ let package = Package(
                 .process("Assets.xcassets"),
                 .copy("Resources/Sounds")
             ]
+        ),
+        .executableTarget(
+            name: "RelayMCPServer",
+            dependencies: [
+                .product(name: "MCP", package: "swift-sdk")
+            ],
+            path: "RelayMCPServer"
         )
     ]
 )

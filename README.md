@@ -41,20 +41,21 @@ Multi-stroke gestures work naturally — an arrow drawn as shaft-then-head, an X
 
 ## Claude Code integration
 
-Enable **Settings → Integration → MCP bridge for Claude Code**, then register the bundled MCP server in your project's `.mcp.json`:
+Enable **Settings → Integration → MCP bridge for Claude Code**, then register the MCP server bundled inside the app — no Node.js required — in your project's `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "relay": {
-      "command": "node",
-      "args": ["/path/to/relay/relay-mcp/dist/index.js"]
+      "command": "/Applications/Relay.app/Contents/MacOS/relay-mcp-server"
     }
   }
 }
 ```
 
-Claude Code can then pull your context directly: `relay_get_context` (the composed prompt), `relay_get_stack` (the raw item stack), `relay_get_status` (recording state), and `relay_stop_and_get_context` (finish dictation and fetch in one step).
+Claude Code can then pull your context directly: `relay_get_context` (the composed prompt), `relay_get_stack` (the raw item stack), `relay_get_status` (recording state), and `relay_stop_and_get_context` (finish dictation and fetch in one step). It can also push back into Relay: `relay_add_context` adds a text item to the stack, and `relay_start_recording` / `relay_stop_recording` control dictation (these two require **Siri voice activation** to be enabled, since they go through the `relay://` URL scheme).
+
+The legacy Node server in `relay-mcp/` still works as a fallback (`"command": "node", "args": ["/path/to/relay/relay-mcp/dist/index.js"]`), but the bundled binary supersedes it.
 
 ## Siri voice activation
 
