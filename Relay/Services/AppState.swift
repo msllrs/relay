@@ -430,10 +430,22 @@ final class AppState: ObservableObject {
             self?.handleAudioDevicesChanged()
         }
         audioDeviceMonitor.onDefaultInputDeviceChanged = { [weak self] in
-            self?.voiceManager.defaultInputDeviceChanged()
-            // Warm capture on the system default follows it too.
-            if let self, self.selectedInputDeviceID == 0 {
-                PreRollAudioService.shared.deviceChanged(to: UInt32?.none)
+            guard let self else { return }
+            // The selection always follows the system default — including from
+            // "System Default" (0) — so external switches (System Settings,
+            // Raycast's "Set Input Device", AirPods auto-switch) snap the picker
+            // to the new concrete device. didSet handles persistence, the
+            // picker, and moving any in-flight recording and warm capture over.
+            if let newDefault = SystemAudioHelper.defaultInputDevice(),
+               newDefault != self.selectedInputDeviceID,
+               self.availableInputDevices.contains(where: { $0.id == newDefault }) {
+                self.selectedInputDeviceID = newDefault
+            } else {
+                self.voiceManager.defaultInputDeviceChanged()
+                // Warm capture on the system default follows it too.
+                if self.selectedInputDeviceID == 0 {
+                    PreRollAudioService.shared.deviceChanged(to: UInt32?.none)
+                }
             }
         }
         audioDeviceMonitor.start()
