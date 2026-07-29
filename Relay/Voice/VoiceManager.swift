@@ -221,9 +221,10 @@ final class VoiceManager: ObservableObject {
         scheduleCaptureRestart()
     }
 
-    /// The explicitly selected device disappeared mid-recording. AppState has
-    /// already fallen back to system default; move the live capture over too.
-    func captureDeviceDisappeared() {
+    /// The effective input device changed mid-recording — the selection was
+    /// re-pointed (picker, system-default follow) or the pinned device
+    /// disappeared. Move the live capture over to the new device.
+    func inputDeviceSwitched() {
         guard isRecording else { return }
         scheduleCaptureRestart()
     }

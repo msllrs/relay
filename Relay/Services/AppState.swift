@@ -180,6 +180,7 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(selectedInputDeviceID, forKey: "selectedInputDeviceID")
             let deviceID = selectedInputDeviceID == 0 ? nil : selectedInputDeviceID
             voiceManager.inputDeviceID = deviceID
+            voiceManager.inputDeviceSwitched()
             PreRollAudioService.shared.deviceChanged(to: deviceID)
         }
     }
@@ -296,8 +297,8 @@ final class AppState: ObservableObject {
         let devices = AudioDeviceManager.inputDevices()
         availableInputDevices = devices
         if selectedInputDeviceID != 0, !devices.contains(where: { $0.id == selectedInputDeviceID }) {
+            // didSet moves any in-flight recording over to the default.
             selectedInputDeviceID = 0
-            voiceManager.captureDeviceDisappeared()
         }
     }
     let isDemo = ProcessInfo.processInfo.environment["RELAY_DEMO"] == "1"
