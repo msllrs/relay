@@ -342,10 +342,11 @@ final class AppState: ObservableObject {
     /// The change count to ignore (set after we write to the pasteboard)
     var lastWrittenChangeCount: Int?
 
-    /// Last frontmost app other than Relay — the auto-paste target.
-    /// `NSApp.deactivate()` alone doesn't reliably restore focus (popover,
-    /// Siri/URL activation), so we re-activate this app explicitly.
-    private var lastExternalApp: NSRunningApplication?
+    /// Last frontmost app other than Relay — the auto-paste target, and where
+    /// focus returns after the popover closes. `NSApp.deactivate()` alone
+    /// doesn't reliably restore focus (popover, Siri/URL activation), so we
+    /// re-activate this app explicitly.
+    private(set) var lastExternalApp: NSRunningApplication?
 
     init() {
         self.clearStackOnCopy = UserDefaults.standard.bool(forKey: "clearStackOnCopy")

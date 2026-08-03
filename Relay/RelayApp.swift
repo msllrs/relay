@@ -214,6 +214,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func showPopover() {
         guard let button = statusItem.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // Activate after showing (the app needs a window for macOS to grant
+        // cooperative activation): a background app that makeKey()s its
+        // popover window without being active is flagged as a "key thief" by
+        // the WindowServer, which then defers HID event delivery — clicks on
+        // the status item lag ~1s or get dropped.
+        NSApp.activate()
         popover.contentViewController?.view.window?.makeKey()
     }
 
@@ -228,6 +234,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         appState.popoverVisible = false
         statusItem.button?.state = .off
+        // We activated to show the popover; hand focus back to the app the
+        // user was in so their typing doesn't land nowhere.
+        if NSApp.isActive, let previous = appState.lastExternalApp {
+            previous.activate()
+        }
         // Reset to the main page after popoverVisible is false, so the reset
         // is instant (no invisible cross-fade a quick reopen could catch).
         appState.showSettings = false
