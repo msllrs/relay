@@ -3,6 +3,25 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.8.0</title>
+            <pubDate>Mon, 03 Aug 2026 19:20:18 +0000</pubDate>
+            <sparkle:version>229</sparkle:version>
+            <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## New
+
+- **LLM output history** — the History section now has a Captures / LLM output toggle. Every composed prompt that leaves Relay (copied or auto-pasted) is kept, newest first; click one to copy it back, and each row shows the app it went to
+
+## Fixed
+
+- **Menu bar clicks are instant again** — macOS's focus protection was flagging Relay as a "key thief" for grabbing key window status without activating, and quietly delayed clicks by up to a second (or dropped them). Relay now activates properly when the popover opens and hands focus back to the app you were in when it closes
+- Clicking the icon to close the popover no longer occasionally closes-and-instantly-reopens it, which read as a dead click
+- The menu bar icon no longer blinks its highlight for a frame when the popover opens, and the held highlight can't get stuck after rapid open/close
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.8.0/Relay-v0.8.0.zip" length="8484711" type="application/octet-stream" sparkle:edSignature="ZmOghNAaKr8RDkKanhUZLB72MYUBfx1J+J7EvqF231Sn6rYCFli/6tGPDGhZbDHzoVP+ZP5OMJ8ASDJzlzaZDg=="/>
+        </item>
+        <item>
             <title>0.7.0</title>
             <pubDate>Wed, 29 Jul 2026 10:28:50 +0000</pubDate>
             <sparkle:version>223</sparkle:version>
