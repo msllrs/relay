@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.action = #selector(togglePopover)
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            // Held-menu look while the popover is open comes from state (.on),
+            // not highlight(): the click tracking's deferred unhighlight wipes
+            // highlight() ~150ms after opening, blinking the icon for a frame.
+            (button.cell as? NSButtonCell)?.showsStateBy = .changeBackgroundCellMask
 
             let dropView = StatusItemDropView(
                 appState: appState,
@@ -217,20 +221,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func popoverDidShow(_ notification: Notification) {
         appState.popoverVisible = true
-        // Standard held-menu highlight while the popover is open. Deferred a
-        // runloop turn: when the popover opens from a status-item click, the
-        // button's own mouse-up handling unhighlights it after the action
-        // returns, wiping a highlight set synchronously here.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.popover.isShown else { return }
-            self.statusItem.button?.highlight(true)
-        }
+        statusItem.button?.state = .on
         overlayController?.hide()
     }
 
     func popoverDidClose(_ notification: Notification) {
         appState.popoverVisible = false
-        statusItem.button?.highlight(false)
+        statusItem.button?.state = .off
         // Reset to the main page after popoverVisible is false, so the reset
         // is instant (no invisible cross-fade a quick reopen could catch).
         appState.showSettings = false
