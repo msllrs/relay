@@ -207,9 +207,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if popover.isShown {
             popover.close()
         } else {
+            // Anchor-click race: when the click's mouse-down already dismissed
+            // the popover transiently, its mouse-up lands here with isShown ==
+            // false and would instantly reopen it — reading as a dead click.
+            if ProcessInfo.processInfo.systemUptime - lastPopoverClose < 0.25 {
+                return
+            }
             showPopover()
         }
     }
+
+    private var lastPopoverClose: TimeInterval = 0
 
     private func showPopover() {
         guard let button = statusItem.button else { return }
@@ -232,6 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        lastPopoverClose = ProcessInfo.processInfo.systemUptime
         appState.popoverVisible = false
         statusItem.button?.state = .off
         // We activated to show the popover; hand focus back to the app the
