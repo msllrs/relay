@@ -631,12 +631,17 @@ private struct DictionaryEditor: View {
 
 // MARK: - Capture History
 
-/// Disclosure list of recent captures; clicking a row copies it back to the
-/// clipboard.
+/// Disclosure list of recent captures or composed LLM outputs; clicking a
+/// row copies it back to the clipboard.
 private struct CaptureHistoryList: View {
     @EnvironmentObject var appState: AppState
     @State private var expanded = false
+    @State private var showingOutputs = false
     @State private var copiedID: UUID?
+
+    private var entries: [CaptureHistoryEntry] {
+        showingOutputs ? appState.outputHistory : appState.captureHistory
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -644,10 +649,10 @@ private struct CaptureHistoryList: View {
                 withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
             } label: {
                 HStack {
-                    Text("Recent captures")
+                    Text(showingOutputs ? "Copied prompts" : "Recent captures")
                         .font(.system(size: 12))
                     Spacer()
-                    Text("\(appState.captureHistory.count)")
+                    Text("\(entries.count)")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Image(systemName: "chevron.right")
@@ -661,14 +666,24 @@ private struct CaptureHistoryList: View {
             .frame(minHeight: 24)
 
             if expanded {
-                if appState.captureHistory.isEmpty {
-                    Text("Nothing captured yet")
+                Picker("History", selection: $showingOutputs) {
+                    Text("Captures").tag(false)
+                    Text("LLM output").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: 180)
+                .padding(.bottom, 2)
+
+                if entries.isEmpty {
+                    Text(showingOutputs ? "No prompts copied yet" : "Nothing captured yet")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .padding(.bottom, 4)
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
-                        ForEach(appState.captureHistory) { entry in
+                        ForEach(entries) { entry in
                             CaptureHistoryRow(entry: entry, copied: copiedID == entry.id) {
                                 appState.copyHistoryEntry(entry)
                                 copiedID = entry.id

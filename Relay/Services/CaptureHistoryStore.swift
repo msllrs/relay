@@ -11,6 +11,14 @@ struct CaptureHistoryStore {
             .appendingPathComponent("capture-history.json")
     )
 
+    /// Composed prompt outputs (what got copied/pasted out), kept separately
+    /// from captures so the two histories roll independently.
+    static let outputs = CaptureHistoryStore(
+        fileURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Relay", isDirectory: true)
+            .appendingPathComponent("output-history.json")
+    )
+
     func load() -> [CaptureHistoryEntry] {
         guard let data = try? Data(contentsOf: fileURL),
               let entries = try? JSONDecoder().decode([CaptureHistoryEntry].self, from: data)

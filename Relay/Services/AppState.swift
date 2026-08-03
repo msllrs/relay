@@ -234,6 +234,11 @@ final class AppState: ObservableObject {
     @Published private(set) var captureHistory: [CaptureHistoryEntry] = CaptureHistoryStore.default.load() {
         didSet { CaptureHistoryStore.default.save(captureHistory) }
     }
+    /// Rolling history of composed prompt outputs — what actually left Relay
+    /// via copy or auto-paste — newest first, capped at 20.
+    @Published private(set) var outputHistory: [CaptureHistoryEntry] = CaptureHistoryStore.outputs.load() {
+        didSet { CaptureHistoryStore.outputs.save(outputHistory) }
+    }
     @Published var itemJustAdded = false
     @Published var isRecording = false
     /// Which popover page is showing. Lifted here (not view state) so the app
@@ -1071,6 +1076,30 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Append a composed prompt to the output history (newest first, capped
+    /// at 20). Copying the same prompt twice keeps one entry.
+    private func recordOutputInHistory(_ prompt: String) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, outputHistory.first?.textContent != prompt else { return }
+        // Prefer the first content line over structural markup (<context>, ## …)
+        // so the preview reads as what was said, not how it was wrapped.
+        let lines = trimmed.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        let previewLine = lines.first { !$0.isEmpty && !$0.hasPrefix("<") && !$0.hasPrefix("#") }
+            ?? lines.first ?? trimmed
+        let entry = CaptureHistoryEntry(
+            contentType: .text,
+            preview: String(previewLine.prefix(100)),
+            textContent: prompt,
+            imagePath: nil,
+            timestamp: Date(),
+            sourceAppName: lastExternalApp?.localizedName
+        )
+        outputHistory.insert(entry, at: 0)
+        if outputHistory.count > 20 {
+            outputHistory.removeLast(outputHistory.count - 20)
+        }
+    }
+
     /// Copy a history entry back to the clipboard.
     func copyHistoryEntry(_ entry: CaptureHistoryEntry) {
         let pasteboard = NSPasteboard.general
@@ -1405,6 +1434,7 @@ final class AppState: ObservableObject {
             ? nonEmptyVoiceNotes.compactMap(\.textContent).joined(separator: " ")
             : PromptComposer.compose(items: stack.items, format: promptFormat, voiceNotePosition: voiceNotePosition)
         writeToClipboard(prompt)
+        recordOutputInHistory(prompt)
 
         flashCopiedConfirmation()
 
