@@ -294,6 +294,12 @@ struct SettingsPage: View {
                 }
                 .labelsHidden()
             }
+
+            SettingsToggle(
+                "Fix self-corrections",
+                help: "Resolves spoken corrections: \"padding 20 pixels, scratch that, 8 pixels\" becomes \"padding 8 pixels\". Understands cues like \"scratch that\", \"no wait\", \"I mean\", and \"start over\". Runs on-device — with Apple Intelligence it uses Apple's local model for trickier phrasing; without it, a built-in heuristic. Nothing leaves your Mac.",
+                isOn: $appState.resolveSelfCorrections
+            )
         }
     }
 

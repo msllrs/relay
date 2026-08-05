@@ -155,6 +155,13 @@ final class AppState: ObservableObject {
     @Published var transcriptEnhancement: TranscriptEnhancement {
         didSet { UserDefaults.standard.set(transcriptEnhancement.rawValue, forKey: "transcriptEnhancement") }
     }
+    /// Opt-in: resolve spoken self-corrections ("…20 pixels, scratch that,
+    /// 8 pixels") in finished transcripts. Heuristic on-device pass
+    /// everywhere; Apple's on-device model handles fuzzier phrasing when
+    /// available. Entirely local either way.
+    @Published var resolveSelfCorrections: Bool {
+        didSet { UserDefaults.standard.set(resolveSelfCorrections, forKey: "resolveSelfCorrections") }
+    }
     /// Custom dictionary: user-defined filler removals and word replacements,
     /// applied to every finished transcript before enhancement.
     @Published var wordRemovals: [WordRemovalRule] = WordRules.loadRemovals() {
@@ -410,6 +417,7 @@ final class AppState: ObservableObject {
         self.promptFormat = PromptFormat(rawValue: UserDefaults.standard.string(forKey: "promptFormat") ?? "") ?? .markdown
         self.voiceNotePosition = VoiceNotePosition(rawValue: UserDefaults.standard.string(forKey: "voiceNotePosition") ?? "") ?? .top
         self.transcriptEnhancement = TranscriptEnhancement(rawValue: UserDefaults.standard.string(forKey: "transcriptEnhancement") ?? "") ?? .off
+        self.resolveSelfCorrections = UserDefaults.standard.bool(forKey: "resolveSelfCorrections")
         self.mcpBridgeEnabled = UserDefaults.standard.bool(forKey: "mcpBridgeEnabled")
         self.siriActivationEnabled = UserDefaults.standard.bool(forKey: "siriActivationEnabled")
         self.annotationEnabled = UserDefaults.standard.bool(forKey: "annotationEnabled")
@@ -890,13 +898,27 @@ final class AppState: ObservableObject {
                 return
             }
 
-            let markedInput = WordRules.apply(
-                self.insertRefMarkers(into: transcription, refs: refs),
-                removals: self.wordRemovals,
-                remappings: self.wordRemappings
-            )
+            let markedRaw = self.insertRefMarkers(into: transcription, refs: refs)
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                var working = markedRaw
+                // Self-corrections resolve before word rules and filler
+                // stripping, which would otherwise eat cue words like
+                // "actually". Gated on a cue so ordinary dictations skip it.
+                if self.resolveSelfCorrections, SelfCorrectionResolver.containsCue(working) {
+                    var resolved: String?
+                    // AI Polish resolves corrections itself; don't spend a
+                    // second model call when it's about to run anyway.
+                    if self.transcriptEnhancement != .aiPolish {
+                        resolved = await FoundationModelsEnhancer.resolveCorrections(working)
+                    }
+                    working = resolved ?? SelfCorrectionResolver.resolve(working)
+                }
+                let markedInput = WordRules.apply(
+                    working,
+                    removals: self.wordRemovals,
+                    remappings: self.wordRemappings
+                )
                 let markedText = await TranscriptEnhancer.enhanceAsync(
                     markedInput,
                     level: self.transcriptEnhancement
