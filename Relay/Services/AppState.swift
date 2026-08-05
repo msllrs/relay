@@ -338,6 +338,8 @@ final class AppState: ObservableObject {
     private var clearAfterCopyTask: Task<Void, Never>?
 
     let voiceManager = VoiceManager()
+    /// Strike-then-remove treatment for live self-corrections (display only).
+    private let liveCorrectionAnimator = LiveCorrectionAnimator()
     let updaterManager = UpdaterManager()
     private let screenshotWatcher = ScreenshotWatcher()
     private let soundFeedback = SoundFeedback()
@@ -525,6 +527,19 @@ final class AppState: ObservableObject {
         // Rebuild display transcription as partial results stream in
         voiceManager.$partialTranscription
             .sink { [weak self] _ in self?.rebuildDisplayTranscription() }
+            .store(in: &cancellables)
+
+        // Live self-correction strikethrough: rebuild when a strike hold
+        // expires (there may be no new partial to trigger it), and start
+        // each session with a clean slate.
+        liveCorrectionAnimator.onNeedsRefresh = { [weak self] in
+            self?.rebuildDisplayTranscription()
+        }
+        voiceManager.$isRecording
+            .dropFirst()
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [weak self] _ in self?.liveCorrectionAnimator.reset() }
             .store(in: &cancellables)
 
         // Stop Esc/keyUp monitors when recording ends
@@ -1342,7 +1357,10 @@ final class AppState: ObservableObject {
         let trimmed = full.count > transcriptionTrimOffset
             ? String(full.dropFirst(transcriptionTrimOffset)).trimmingCharacters(in: .whitespaces)
             : ""
-        let currentSession = insertRefMarkers(into: trimmed, refs: pendingRefs)
+        var currentSession = insertRefMarkers(into: trimmed, refs: pendingRefs)
+        if resolveSelfCorrections {
+            currentSession = liveCorrectionAnimator.process(currentSession)
+        }
         let newText = frozenTranscription.isEmpty
             ? currentSession
             : frozenTranscription + " " + currentSession
@@ -1423,6 +1441,8 @@ final class AppState: ObservableObject {
         frozenTranscription = ""
         displayTranscription = ""
         pendingRefs = []
+        // Trim-offset changes shift token positions, invalidating run keys.
+        liveCorrectionAnimator.reset()
 
         // If recording, add a fresh placeholder and skip already-transcribed text
         if voiceManager.isRecording {

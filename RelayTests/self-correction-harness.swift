@@ -113,5 +113,24 @@ expect("dont-forget-that false positive",
        "don't forget that the API is rate limited",
        "don't forget that the API is rate limited")
 
+// Live mode: trailing retractions wait for the repair still being spoken
+func expectLive(_ name: String, _ input: String, _ expected: String) {
+    let got = SelfCorrectionResolver.resolve(input, mode: .live)
+    if got == expected {
+        print("PASS  \(name)")
+    } else {
+        print("FAIL  \(name)\n      input:    \(input)\n      expected: \(expected)\n      got:      \(got)")
+        failures += 1
+    }
+}
+
+expectLive("live defers trailing retraction",
+           "Change the padding to 20 pixels, scratch that",
+           "Change the padding to 20 pixels, scratch that")
+
+expectLive("live resolves completed correction",
+           "Change the padding to 20 pixels, scratch that, 8 pixels",
+           "Change the padding to 8 pixels")
+
 print(failures == 0 ? "\nAll tests passed" : "\n\(failures) failure(s)")
 exit(failures == 0 ? 0 : 1)

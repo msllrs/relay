@@ -15,6 +15,16 @@ import Foundation
 /// edit, including markers inside a deleted span.
 enum SelfCorrectionResolver {
 
+    enum Mode {
+        /// Finished transcript: every edit applies, including trailing
+        /// retractions ("…scratch that." with nothing after).
+        case full
+        /// Streaming partials: trailing retractions are deferred, because the
+        /// repair is usually still being spoken — resolving early would blow
+        /// away a clause that alignment could scope precisely a moment later.
+        case live
+    }
+
     // MARK: - Cues
 
     private enum CueKind {
@@ -68,17 +78,22 @@ enum SelfCorrectionResolver {
         #"make\s+that\b"#,
     ]
 
-    private static var cuePatterns: [(CueKind, String)] {
+    // Compiled once — resolve() runs on every streaming partial while the
+    // live setting is on.
+    private static let cueRegexes: [(CueKind, NSRegularExpression)] = {
         func assemble(_ bodies: [String], prefixed: Bool) -> String {
             let body = "(?:" + bodies.joined(separator: "|") + ")"
             return #"\b"# + (prefixed ? cuePrefix : "") + body
         }
-        return [
+        let patterns: [(CueKind, String)] = [
             (.restart, assemble(restartBodies, prefixed: true)),
             (.strong, assemble(strongBodies, prefixed: true)),
             (.weak, assemble(weakBodies, prefixed: false)),
         ]
-    }
+        return patterns.compactMap { kind, pattern in
+            (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])).map { (kind, $0) }
+        }
+    }()
 
     // MARK: - Public
 
@@ -88,14 +103,12 @@ enum SelfCorrectionResolver {
     static func containsCue(_ text: String) -> Bool {
         guard !text.isEmpty else { return false }
         let range = NSRange(text.startIndex..., in: text)
-        for (_, pattern) in cuePatterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
-            if regex.firstMatch(in: text, range: range) != nil { return true }
+        return cueRegexes.contains { _, regex in
+            regex.firstMatch(in: text, range: range) != nil
         }
-        return false
     }
 
-    static func resolve(_ text: String) -> String {
+    static func resolve(_ text: String, mode: Mode = .full) -> String {
         guard containsCue(text) else { return text }
 
         // Shield ref markers behind sentinels so no edit can mangle them.
@@ -111,7 +124,7 @@ enum SelfCorrectionResolver {
         var iterations = 0
         while iterations < 6, let cue = firstCue(in: working, from: searchFrom) {
             iterations += 1
-            if let edited = apply(cue, to: working, sentinel: sentinelChar) {
+            if let edited = apply(cue, to: working, sentinel: sentinelChar, mode: mode) {
                 working = edited
                 searchFrom = working.startIndex
             } else {
@@ -138,9 +151,8 @@ enum SelfCorrectionResolver {
     private static func firstCue(in text: String, from index: String.Index) -> CueMatch? {
         let searchRange = NSRange(index..<text.endIndex, in: text)
         var best: CueMatch?
-        for (kind, pattern) in cuePatterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                  let match = regex.firstMatch(in: text, range: searchRange),
+        for (kind, regex) in cueRegexes {
+            guard let match = regex.firstMatch(in: text, range: searchRange),
                   let range = Range(match.range, in: text)
             else { continue }
             if let current = best {
@@ -161,7 +173,7 @@ enum SelfCorrectionResolver {
 
     /// Returns the edited text, or nil when a weak cue couldn't be resolved
     /// confidently and the text should stay untouched.
-    private static func apply(_ cue: CueMatch, to text: String, sentinel: Character) -> String? {
+    private static func apply(_ cue: CueMatch, to text: String, sentinel: Character, mode: Mode) -> String? {
         // Pre: everything before the cue, minus the pause punctuation that
         // usually precedes it ("...20 pixels, scratch that").
         var pre = String(text[..<cue.range.lowerBound])
@@ -208,8 +220,9 @@ enum SelfCorrectionResolver {
 
         if repair.isEmpty {
             // Trailing retraction ("...scratch that."): unambiguous cues drop
-            // the last clause; ambiguous ones stay untouched.
-            guard cue.kind == .strong else { return nil }
+            // the last clause; ambiguous ones stay untouched. Deferred while
+            // streaming — see Mode.live.
+            guard cue.kind == .strong, mode == .full else { return nil }
             deleteClause(&preTokens, regionStart: regionStart, sentinel: sentinel)
             return assemble(preTokens, post: post)
         }

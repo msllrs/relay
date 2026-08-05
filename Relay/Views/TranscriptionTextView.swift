@@ -8,15 +8,19 @@ struct TranscriptionTextView: View {
 
     /// Delays re-enabling text animation after recording stops to avoid bounce.
     @State private var animateText = false
+    /// Tracks whether the previous text contained strike markers, so the
+    /// collapse that removes struck words still animates while recording.
+    @State private var hadStrikes = false
 
     var body: some View {
         FlowLayout(rowSpacing: 4, itemSpacing: 4, minRowHeight: 20) {
             ForEach(segments) { segment in
                 switch segment.kind {
-                case .word(let word):
+                case .word(let word, let struck):
                     Text(word)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.primary.opacity(0.78))
+                        .strikethrough(struck, color: .secondary)
+                        .foregroundStyle(.primary.opacity(struck ? 0.35 : 0.78))
                         .lineLimit(1)
                 case .chip(let index):
                     let item = resolveItem(index: index)
@@ -36,8 +40,11 @@ struct TranscriptionTextView: View {
                 }
             }
         }
-        .animation(animateText ? .snappy(duration: 0.25) : nil, value: text)
+        .animation(shouldAnimateText ? .snappy(duration: 0.25) : nil, value: text)
         .animation(.snappy(duration: 0.25), value: items.count)
+        .onChange(of: text) { _, newValue in
+            hadStrikes = newValue.contains(LiveCorrectionAnimator.strikeStart)
+        }
         .onChange(of: isRecording) { _, recording in
             if recording {
                 animateText = false
@@ -51,8 +58,14 @@ struct TranscriptionTextView: View {
         }
     }
 
+    /// Streaming text normally appends without animation; strike-in and the
+    /// collapse of struck words are the exception.
+    private var shouldAnimateText: Bool {
+        animateText || hadStrikes || text.contains(LiveCorrectionAnimator.strikeStart)
+    }
+
     private enum SegmentKind {
-        case word(String)
+        case word(String, struck: Bool)
         case chip(Int)
     }
 
@@ -66,47 +79,71 @@ struct TranscriptionTextView: View {
         items.filter { $0.contentType != .voiceNote }
     }
 
+    /// The text split into runs by live-correction strike markers.
+    private var strikeRuns: [(text: Substring, struck: Bool)] {
+        guard text.contains(LiveCorrectionAnimator.strikeStart) else {
+            return [(text[...], false)]
+        }
+        var runs: [(Substring, Bool)] = []
+        var remaining = text[...]
+        while let start = remaining.firstRange(of: LiveCorrectionAnimator.strikeStart) {
+            if start.lowerBound > remaining.startIndex {
+                runs.append((remaining[..<start.lowerBound], false))
+            }
+            remaining = remaining[start.upperBound...]
+            if let end = remaining.firstRange(of: LiveCorrectionAnimator.strikeEnd) {
+                runs.append((remaining[..<end.lowerBound], true))
+                remaining = remaining[end.upperBound...]
+            } else {
+                runs.append((remaining, true))
+                remaining = remaining[remaining.endIndex...]
+            }
+        }
+        if !remaining.isEmpty {
+            runs.append((remaining, false))
+        }
+        return runs
+    }
+
     private var segments: [Segment] {
         let resolved = nonVoiceItems
 
         let pattern = /\[ref:(\d+)\]/
         var result: [Segment] = []
-        var remaining = text[...]
         // Track word occurrences to create stable IDs even for duplicate words
         var wordCounts: [String: Int] = [:]
         // Track which 1-based item indices are referenced in the text
         var referencedIndices: Set<Int> = []
 
-        while let match = remaining.firstMatch(of: pattern) {
-            // Text before the match → split into words
-            let before = remaining[remaining.startIndex..<match.range.lowerBound]
-            let words = before.split(separator: " ", omittingEmptySubsequences: true)
-            for word in words {
+        func appendWords(_ chunk: Substring, struck: Bool) {
+            for word in chunk.split(separator: " ", omittingEmptySubsequences: true) {
                 let w = String(word)
                 let count = wordCounts[w, default: 0]
                 wordCounts[w] = count + 1
-                result.append(Segment(id: "w_\(w)_\(count)", kind: .word(w)))
+                result.append(Segment(
+                    id: "w_\(w)_\(count)" + (struck ? "_s" : ""),
+                    kind: .word(w, struck: struck)
+                ))
             }
-
-            // Use the item's UUID as stable identity so renumbering doesn't confuse SwiftUI
-            if let refIndex = Int(match.output.1) {
-                let itemID = (refIndex >= 1 && refIndex <= resolved.count)
-                    ? resolved[refIndex - 1].id.uuidString
-                    : "unknown\(refIndex)"
-                result.append(Segment(id: "ref_\(itemID)", kind: .chip(refIndex)))
-                referencedIndices.insert(refIndex)
-            }
-
-            remaining = remaining[match.range.upperBound...]
         }
 
-        // Remaining text after last match
-        let words = remaining.split(separator: " ", omittingEmptySubsequences: true)
-        for word in words {
-            let w = String(word)
-            let count = wordCounts[w, default: 0]
-            wordCounts[w] = count + 1
-            result.append(Segment(id: "w_\(w)_\(count)", kind: .word(w)))
+        for run in strikeRuns {
+            var remaining = run.text
+            while let match = remaining.firstMatch(of: pattern) {
+                appendWords(remaining[remaining.startIndex..<match.range.lowerBound], struck: run.struck)
+
+                // Use the item's UUID as stable identity so renumbering doesn't confuse SwiftUI
+                if let refIndex = Int(match.output.1) {
+                    let itemID = (refIndex >= 1 && refIndex <= resolved.count)
+                        ? resolved[refIndex - 1].id.uuidString
+                        : "unknown\(refIndex)"
+                    result.append(Segment(id: "ref_\(itemID)", kind: .chip(refIndex)))
+                    referencedIndices.insert(refIndex)
+                }
+
+                remaining = remaining[match.range.upperBound...]
+            }
+            appendWords(remaining, struck: run.struck)
         }
 
         // Append chips for items not referenced in the text (captured while not recording)
