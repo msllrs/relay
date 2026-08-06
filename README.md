@@ -15,14 +15,17 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 - **Clipboard capture** — Automatically collects what you copy with content type detection (code, URL, terminal, JSON, text)
 - **Screen annotations** — Hold a shortcut and draw directly on your screen. Relay recognizes the gesture — circle, X, arrow, or highlight — captures the marked region, and attaches the intent ("focus here", "remove this", "points to this") so the LLM knows what you meant. Draw mid-dictation and the annotation lands inline with your words; committed marks melt away in a puff of smoke
 - **Screenshots, files, and folders** — Drag and drop images, files, or entire folders to add them as context
-- **Voice notes** — Record and transcribe with native macOS speech recognition, WhisperKit, or Parakeet; pick a specific input device or follow the system default, with seamless mid-recording handoff when devices connect or disconnect
+- **Voice notes** — Record and transcribe with native macOS speech recognition, Apple's new SpeechAnalyzer (macOS 26), WhisperKit, or Parakeet; pick a specific input device or follow the system default, with seamless mid-recording handoff when devices connect or disconnect. Optional auto-stop after a stretch of silence
 - **Recording overlay** — A draggable floating indicator that springs out of the menu bar, shows live audio levels, flashes on new clipboard captures, and doubles as a stop button
 - **Claude Code integration** — An MCP bridge exposes your context stack directly to Claude Code (`relay_get_context` and friends), so agents can pull what you've collected without any copy-paste
 - **Prompt composition** — Generates structured prompts in Markdown format, with an option to switch to XML
+- **History** — A rolling log of recent captures and every composed prompt that left Relay (copied or auto-pasted), with the app it went to; click any entry to copy it back
 - **Auto-paste** — Optionally copy and paste the result straight into the focused app after dictation; text is inserted directly via the Accessibility API (with ⌘V as fallback), and holding ⇧ as the paste lands also presses Return to send it
 - **Menu bar quick record** — Opt-in: left-click the menu bar icon to start/stop recording, right-click to open the panel
 - **Launch at login & Dock** — Register Relay as a login item, and optionally show it in the Dock and app switcher
-- **Transcript cleanup** — Three modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), and Formatted (clean + capitalization, deduplication, punctuation)
+- **Transcript cleanup** — Four modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), Formatted (clean + capitalization, deduplication, punctuation), and AI Polish (Apple's on-device model resolves self-corrections and homophones — needs Apple Intelligence)
+- **Scratch That** — Opt-in: say "make the padding 20 pixels… no wait, 8 pixels" and the transcript just says 8 pixels. Understands cues like "scratch that", "I mean", "changed my mind", and "start over"; the corrected-away words are struck through live while you speak, then swept away. Fully on-device
+- **Custom dictionary** — Removal and replacement rules applied to every transcript (with live preview), plus vocabulary terms the speech engines are biased toward. Opt-in correction learning watches the field you pasted into and picks up words you fix by hand
 - **Global hotkeys** — Customizable keyboard shortcuts for recording and annotation
 - **Siri voice activation** — Opt-in `relay://` URL commands let Siri Shortcuts (or Raycast, scripts, anything that opens URLs) start and stop recording hands-free
 
