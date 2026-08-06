@@ -1318,6 +1318,20 @@ final class AppState: ObservableObject {
         return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
     }
 
+    /// Owning process of the system-wide focused UI element, or nil when there
+    /// is no readable focused element.
+    private static func focusedElementPID() -> pid_t? {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef, CFGetTypeID(focused) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(focused as! AXUIElement, &pid) == .success else { return nil }
+        return pid
+    }
+
     /// Hand focus back to the previously focused app, then insert the clipboard
     /// text into its focused input — direct AX insertion first, ⌘V fallback.
     private func autoPasteToFocusedInput() {
@@ -1337,6 +1351,14 @@ final class AppState: ObservableObject {
             // any synthesized ⌘V can fire — pasting stale contents otherwise.
             if let target = self.lastWrittenChangeCount {
                 await PasteboardHelper.waitForCommit(target: target)
+            }
+            let verdict = AutoPasteGuard.decide(focusedElementPID: Self.focusedElementPID(), ownPID: getpid())
+            guard verdict == .proceed else {
+                // Leave the prompt on the clipboard so the user can ⌘V manually, and
+                // drop the pre-write snapshot so a later restore can't clobber it.
+                self.preWriteSnapshot = nil
+                NSLog("autoPaste: skipped (%@) — focused element is not an external app", String(describing: verdict))
+                return
             }
             let text = NSPasteboard.general.string(forType: .string) ?? ""
             if text.isEmpty || !Self.insertTextViaAccessibility(text) {
