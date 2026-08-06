@@ -3,6 +3,24 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.9.0</title>
+            <pubDate>Thu, 06 Aug 2026 11:53:38 +0000</pubDate>
+            <sparkle:version>237</sparkle:version>
+            <sparkle:shortVersionString>0.9.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## New
+
+- **Scratch That** (opt-in): dictation now resolves spoken self-corrections — "make the padding 20 pixels, scratch that, 8 pixels" comes out as "make the padding 8 pixels". Understands cues like "no wait", "I mean", "changed my mind", and "start over". While you speak, the corrected-away words are struck through live in the popover, then swept away. Fully on-device: a built-in heuristic everywhere, with Apple's on-device model handling trickier phrasing when Apple Intelligence is available. Enable it in Settings → Prompt → "Fix self-corrections".
+
+## Fixed
+
+- A slow transcript finalization could bleed a previous dictation into your next recording — re-freezing old text into the popover, auto-copying a half-finished session, and clearing the live one. Late results now never interrupt a newer session, and cleared prompts stay cleared (the text remains available in capture history)
+- Auto-paste could land inside Relay's own Settings window when it still had keyboard focus — including into a dictionary rule's replacement field, silently corrupting the rule. Relay now verifies the focused field belongs to another app before pasting; otherwise the prompt simply stays on the clipboard
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.9.0/Relay-v0.9.0.zip" length="8514067" type="application/octet-stream" sparkle:edSignature="e7568zFOFDGYSEHswqJYOqO5/lZJ4k3Pclj89cEhcxgdRgT0mn6qBDUHDgGFwB/DN9wSzwTurvrTqAnl25BFBg=="/>
+        </item>
+        <item>
             <title>0.8.0</title>
             <pubDate>Mon, 03 Aug 2026 19:20:18 +0000</pubDate>
             <sparkle:version>229</sparkle:version>
