@@ -320,6 +320,11 @@ final class AppState: ObservableObject {
     /// Accumulated transcription text from previous dictation sessions (before the current one).
     private var frozenTranscription = ""
 
+    /// Bumped whenever the dictation world changes under a pending finalize
+    /// (new session started, stack cleared). Finalize Tasks capture the value
+    /// at stop and compare on landing to detect that they're stale.
+    private var dictationGeneration = 0
+
     /// Number of characters in `partialTranscription` to skip (set when clearing mid-recording).
     private var transcriptionTrimOffset = 0
 
@@ -826,6 +831,7 @@ final class AppState: ObservableObject {
         // in a burst — would otherwise stack placeholders and restart the
         // engine mid-session, killing the recording.
         guard activeVoiceNoteID == nil else { return }
+        dictationGeneration += 1
         if !isMonitoring {
             startMonitoring()
         }
@@ -900,6 +906,7 @@ final class AppState: ObservableObject {
         activeVoiceNoteID = nil
         let trimOffset = transcriptionTrimOffset
         transcriptionTrimOffset = 0
+        let generationAtStop = dictationGeneration
         voiceManager.stopRecording { [weak self] fullTranscription in
             guard let self else { return }
             let transcription = trimOffset > 0
@@ -938,15 +945,44 @@ final class AppState: ObservableObject {
                     markedInput,
                     level: self.transcriptEnhancement
                 )
-                if let id = voiceNoteID {
-                    self.stack.update(id: id, textContent: markedText)
+                // The awaits above can take seconds; the world may have moved
+                // on (new recording, stack cleared). A stale finalize must not
+                // re-freeze old text into the display or fire the auto-copy
+                // chain against a half-finished new session.
+                let stillPresent = voiceNoteID.map { id in self.stack.items.contains { $0.id == id } } ?? true
+                let action = DictationFinalizePolicy.decide(.init(
+                    generationAtStop: generationAtStop,
+                    generationNow: self.dictationGeneration,
+                    isRecording: self.voiceManager.isRecording,
+                    placeholderStillInStack: stillPresent
+                ))
+
+                switch action {
+                case .historyOnly:
+                    // The item was cleared away mid-finalize — putting it back
+                    // would undo the clear. History keeps the text recoverable.
                     self.recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: markedText))
-                } else {
-                    let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
-                    self.stack.add(item)
-                    self.recordInHistory(item)
+                case .accumulate:
+                    // A newer session owns delivery: keep the text and the
+                    // accumulated transcript current, but no freeze/auto-copy.
+                    if let id = voiceNoteID {
+                        self.stack.update(id: id, textContent: markedText)
+                    } else {
+                        self.stack.add(ClipboardItem(contentType: .voiceNote, textContent: markedText))
+                    }
+                    self.recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: markedText))
+                    self.appendToFrozenTranscription(markedText)
+                case .deliver:
+                    if let id = voiceNoteID {
+                        self.stack.update(id: id, textContent: markedText)
+                        self.recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: markedText))
+                    } else {
+                        let item = ClipboardItem(contentType: .voiceNote, textContent: markedText)
+                        self.stack.add(item)
+                        self.recordInHistory(item)
+                    }
+                    self.freezeCurrentSession(markedText)
                 }
-                self.freezeCurrentSession(markedText)
             }
         }
         stopMonitoring()
@@ -1225,13 +1261,25 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Freeze the completed session text into the accumulated transcription.
-    private func freezeCurrentSession(_ markedText: String) {
+    /// Append a finished session's text to the accumulated transcription and
+    /// refresh the display without triggering delivery — used when the session
+    /// finalized after a newer one already took over.
+    private func appendToFrozenTranscription(_ markedText: String) {
         if frozenTranscription.isEmpty {
             frozenTranscription = markedText
         } else {
             frozenTranscription += " " + markedText
         }
+        if voiceManager.isRecording {
+            rebuildDisplayTranscription()   // splice live partial after the frozen text
+        } else {
+            displayTranscription = frozenTranscription
+        }
+    }
+
+    /// Freeze the completed session text into the accumulated transcription.
+    private func freezeCurrentSession(_ markedText: String) {
+        appendToFrozenTranscription(markedText)
         displayTranscription = frozenTranscription
 
         // Auto-copy after dictation
@@ -1437,6 +1485,7 @@ final class AppState: ObservableObject {
     }
 
     func clearAll() {
+        dictationGeneration += 1
         stack.clear()
         frozenTranscription = ""
         displayTranscription = ""
