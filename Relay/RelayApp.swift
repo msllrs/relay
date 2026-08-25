@@ -133,6 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        appState.prepareForTermination()
+    }
+
     // MARK: - Dock integration (visible when Show in Dock is on)
 
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
@@ -152,6 +156,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             keyEquivalent: ""
         )
         pasteLast.target = self
+        // Grey out once the newest voice note has aged out of history —
+        // clicking would otherwise silently do nothing.
+        menu.autoenablesItems = false
+        pasteLast.isEnabled = appState.captureHistory.contains {
+            $0.contentType == .voiceNote && !($0.textContent ?? "").isEmpty
+        }
         menu.addItem(pasteLast)
         return menu
     }
@@ -258,10 +268,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func updateIcon() {
         let state: MenuBarIconBuilder.IconState
-        if appState.itemJustAdded {
-            state = .badge
-        } else if appState.isRecording {
+        if appState.isRecording {
+            // Recording outranks the capture badge: the one always-visible
+            // "mic is live" indicator must not blink out for two seconds per
+            // capture (the overlay flash already confirms the capture).
             state = .recording
+        } else if appState.itemJustAdded {
+            state = .badge
         } else if appState.isMonitoring {
             state = .active
         } else {
