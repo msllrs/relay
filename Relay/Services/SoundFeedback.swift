@@ -40,7 +40,7 @@ final class SoundFeedback {
     }
 
     private static func load(_ name: String) -> NSSound? {
-        guard let url = Bundle.module.url(forResource: name, withExtension: "wav", subdirectory: "Sounds") else {
+        guard let url = Bundle.relayResources.url(forResource: name, withExtension: "wav", subdirectory: "Sounds") else {
             NSLog("SoundFeedback: missing %@.wav", name)
             return nil
         }
