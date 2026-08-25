@@ -9,7 +9,14 @@ import Foundation
 final class CorrectionLearner {
     static let shared = CorrectionLearner()
 
-    var isEnabled = false
+    var isEnabled = false {
+        didSet {
+            if !isEnabled {
+                pendingCheck?.cancel()
+                pendingCheck = nil
+            }
+        }
+    }
 
     /// How long after the paste we look for corrections. One sample keeps the
     /// AX traffic negligible; corrections made later are caught next dictation.
