@@ -13,6 +13,9 @@ final class ScreenshotWatcher {
     private var seenPaths = Set<String>()
 
     var onScreenshot: ((URL) -> Void)?
+    /// Fired when a watched folder cannot be read (Files & Folders denied) —
+    /// Spotlight filters unreadable folders silently, so this is the only signal.
+    var onScopeUnreadable: (() -> Void)?
 
     /// Where screenshots can land: the system's configured save location plus
     /// the Desktop default. Resolved at each start so location changes apply.
@@ -46,8 +49,16 @@ final class ScreenshotWatcher {
         // prompt on first use — Spotlight silently filters results from
         // folders the app can't read (Desktop is TCC-protected), so without
         // the grant the query simply never matches.
+        var anyUnreadable = false
         for dir in scopes {
-            _ = try? FileManager.default.contentsOfDirectory(atPath: dir.path)
+            do {
+                _ = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            } catch {
+                anyUnreadable = true
+            }
+        }
+        if anyUnreadable {
+            onScopeUnreadable?()
         }
 
         let query = NSMetadataQuery()
