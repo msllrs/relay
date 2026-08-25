@@ -13,7 +13,12 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.0"),
+        // Pinned: 0.12.2+ needs swift-transformers 1.x, which WhisperKit 0.9
+        // can't resolve against, and 0.13+ rewrites the StreamingAsrManager
+        // API. Widening this range means migrating WhisperKit and
+        // FluidAudioEngine together. Until then, building from source needs a
+        // Swift ≤6.2 toolchain (0.12.1's AsrManager isn't Sendable).
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.12.1"),
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.0.0"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.9.0"),
     ],
