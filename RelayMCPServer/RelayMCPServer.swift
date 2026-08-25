@@ -337,8 +337,33 @@ enum Bridge {
         ])
     }
 
+    /// Refusal for tools that fire a `relay://` URL and confirm the outcome
+    /// via status.json. The app deletes the whole bridge directory when the
+    /// MCP bridge is disabled, so a readable status.json is the liveness
+    /// signal — the file is rewritten on every state change but has no idle
+    /// heartbeat, so existence + decodability (not age) is the strongest
+    /// check available. Without it the URL must never be opened: with 'Siri
+    /// voice activation' enabled the command still reaches Relay, so a real
+    /// recording (live microphone) would start or stop while this server,
+    /// unable to read status.json, reports failure.
+    private static func bridgeRequiredError() -> CallTool.Result {
+        .init(
+            content: [
+                .text("The MCP bridge is disabled in Relay's settings, so recording state "
+                    + "cannot be confirmed — the command was NOT sent to Relay. "
+                    + "Enable 'MCP bridge for Claude Code' in Relay settings, then try again.")
+            ],
+            isError: true
+        )
+    }
+
     private static func startRecording() async throws -> CallTool.Result {
-        if let status = readStatus(), status.isRecording {
+        // Preflight: never fire the URL blind — with the bridge off, Relay
+        // would start a live recording while this tool reports failure.
+        guard let status = readStatus() else {
+            return bridgeRequiredError()
+        }
+        if status.isRecording {
             return .init(content: [.text("Relay is already recording.")])
         }
         try openRelayURL(command: "start-recording")
@@ -352,7 +377,12 @@ enum Bridge {
     }
 
     private static func stopRecording() async throws -> CallTool.Result {
-        if let status = readStatus(), !status.isRecording {
+        // Same preflight as startRecording: only fire the URL when the
+        // bridge can confirm the result.
+        guard let status = readStatus() else {
+            return bridgeRequiredError()
+        }
+        if !status.isRecording {
             return .init(content: [.text("Relay is not recording.")])
         }
         try openRelayURL(command: "stop-recording")
