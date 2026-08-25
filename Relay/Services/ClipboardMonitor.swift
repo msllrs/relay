@@ -82,27 +82,32 @@ final class ClipboardMonitor {
 
         // Try to read text
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            let contentType = ContentClassifier.classify(text: text)
-            let truncatedText = truncateIfNeeded(text)
-            let item = ClipboardItem(contentType: contentType, textContent: truncatedText)
+            let item = Self.textItem(from: text)
             if !isDuplicateOfLastItem(item) {
                 appState.addItem(item)
             }
         }
     }
 
-    /// Returns true if the new item's content matches the last item in the stack.
     private func isDuplicateOfLastItem(_ item: ClipboardItem) -> Bool {
-        guard let last = appState?.stack.items.last else { return false }
+        Self.isDuplicate(item, inStack: appState?.stack.items ?? [])
+    }
+
+    /// Returns true if the new item's content matches the most recent
+    /// non-voice-note item in the stack. Text compares by text, image-only
+    /// items by image file bytes; unreadable image files fail open.
+    nonisolated static func isDuplicate(_ item: ClipboardItem, inStack items: [ClipboardItem]) -> Bool {
+        guard let last = items.last(where: { $0.contentType != .voiceNote }) else { return false }
 
         // Compare text content
-        if let newText = item.textContent, let lastText = last.textContent {
-            return newText == lastText
+        if let newText = item.textContent {
+            return newText == last.textContent
         }
 
         // Compare image file data
-        if let newPath = item.imagePath, let lastPath = last.imagePath {
-            guard let newData = try? Data(contentsOf: URL(fileURLWithPath: newPath)),
+        if let newPath = item.imagePath {
+            guard let lastPath = last.imagePath,
+                  let newData = try? Data(contentsOf: URL(fileURLWithPath: newPath)),
                   let lastData = try? Data(contentsOf: URL(fileURLWithPath: lastPath)) else {
                 return false
             }
@@ -110,6 +115,14 @@ final class ClipboardMonitor {
         }
 
         return false
+    }
+
+    /// Build a text item from raw clipboard text, truncating before
+    /// classifying so the type always matches the stored content.
+    nonisolated static func textItem(from text: String) -> ClipboardItem {
+        let truncatedText = truncateIfNeeded(text)
+        let contentType = ContentClassifier.classify(text: truncatedText)
+        return ClipboardItem(contentType: contentType, textContent: truncatedText)
     }
 
     private func readFileURLs(from pasteboard: NSPasteboard) -> [URL]? {
@@ -145,7 +158,7 @@ final class ClipboardMonitor {
     }
 
     /// Truncate text items larger than 10KB
-    private func truncateIfNeeded(_ text: String) -> String {
+    nonisolated private static func truncateIfNeeded(_ text: String) -> String {
         let maxSize = 10_240
         guard text.utf8.count > maxSize else { return text }
         let truncated = String(text.prefix(maxSize))
