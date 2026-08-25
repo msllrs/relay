@@ -107,7 +107,8 @@ enum PromptComposer {
     private static func markdownContent(for item: ClipboardItem, raw: String) -> String {
         switch item.contentType {
         case .code, .json, .markdown, .terminal, .error, .diff:
-            return "```\n\(raw)\n```"
+            let fence = fence(for: raw)
+            return "\(fence)\n\(raw)\n\(fence)"
         case .image:
             return "![image](\(raw.replacingOccurrences(of: "[image: ", with: "").replacingOccurrences(of: "]", with: "")))"
         case .annotation:
@@ -124,6 +125,20 @@ enum PromptComposer {
         case .text, .voiceNote:
             return raw
         }
+    }
+
+    private static func fence(for content: String) -> String {
+        var longestRun = 0
+        var currentRun = 0
+        for character in content {
+            if character == "`" {
+                currentRun += 1
+                longestRun = max(longestRun, currentRun)
+            } else {
+                currentRun = 0
+            }
+        }
+        return String(repeating: "`", count: max(3, longestRun + 1))
     }
 
     // MARK: - Shared
