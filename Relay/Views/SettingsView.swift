@@ -215,6 +215,9 @@ struct SettingsPage: View {
                 isOn: $appState.captureClipboardOnStart
             )
             SettingsToggle("Add screenshots taken while recording", isOn: $appState.captureScreenshotsWhileRecording)
+            if appState.needsFilesPermission {
+                FilesNotGrantedBanner()
+            }
             SettingsToggle("Keep popover pinned", isOn: $appState.pinPopover)
             SettingsToggle("Show recording overlay", isOn: $appState.showRecordingOverlay)
             SettingsToggle("Clear after copying", isOn: $appState.clearStackOnCopy)
@@ -225,6 +228,12 @@ struct SettingsPage: View {
     private var applicationSection: some View {
         SettingsSection("Application") {
             SettingsToggle("Launch at login", isOn: $appState.launchAtLogin)
+            if let message = appState.launchAtLoginErrorMessage {
+                Text("Couldn't update the login item: \(message)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             SettingsToggle("Show in Dock", isOn: $appState.showInDock)
             SettingsToggle("Start recording on menu bar click", isOn: $appState.startRecordingOnMenubarClick)
         }
@@ -343,7 +352,8 @@ struct SettingsPage: View {
                         defaultShortcut: .annotateDefault,
                         onUpdate: { state, shortcut in
                             state.hotkeyManager?.updateAnnotateShortcut(shortcut)
-                        }
+                        },
+                        conflictingShortcut: { KeyboardShortcutModel.load() }
                     )
                 }
 
@@ -644,6 +654,7 @@ private struct CaptureHistoryList: View {
     @State private var expanded = false
     @State private var showingOutputs = false
     @State private var copiedID: UUID?
+    @State private var failedID: UUID?
 
     private var entries: [CaptureHistoryEntry] {
         showingOutputs ? appState.outputHistory : appState.captureHistory
@@ -672,14 +683,29 @@ private struct CaptureHistoryList: View {
             .frame(minHeight: 24)
 
             if expanded {
-                Picker("History", selection: $showingOutputs) {
-                    Text("Captures").tag(false)
-                    Text("LLM output").tag(true)
+                HStack {
+                    Picker("History", selection: $showingOutputs) {
+                        Text("Captures").tag(false)
+                        Text("LLM output").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: 180)
+
+                    Spacer()
+
+                    if !entries.isEmpty {
+                        Button("Clear") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                appState.clearHistory(outputs: showingOutputs)
+                            }
+                        }
+                        .font(.system(size: 11))
+                        .controlSize(.small)
+                        .help(showingOutputs ? "Erase the copied-prompt history" : "Erase the capture history")
+                    }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: 180)
                 .padding(.bottom, 2)
 
                 if entries.isEmpty {
@@ -690,12 +716,19 @@ private struct CaptureHistoryList: View {
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(entries) { entry in
-                            CaptureHistoryRow(entry: entry, copied: copiedID == entry.id) {
-                                appState.copyHistoryEntry(entry)
-                                copiedID = entry.id
-                                Task {
-                                    try? await Task.sleep(for: .seconds(1.2))
-                                    if copiedID == entry.id { copiedID = nil }
+                            CaptureHistoryRow(entry: entry, copied: copiedID == entry.id, failed: failedID == entry.id) {
+                                if appState.copyHistoryEntry(entry) {
+                                    copiedID = entry.id
+                                    Task {
+                                        try? await Task.sleep(for: .seconds(1.2))
+                                        if copiedID == entry.id { copiedID = nil }
+                                    }
+                                } else {
+                                    failedID = entry.id
+                                    Task {
+                                        try? await Task.sleep(for: .seconds(1.2))
+                                        if failedID == entry.id { failedID = nil }
+                                    }
                                 }
                             }
                         }
@@ -710,6 +743,7 @@ private struct CaptureHistoryList: View {
 private struct CaptureHistoryRow: View {
     let entry: CaptureHistoryEntry
     let copied: Bool
+    let failed: Bool
     let onCopy: () -> Void
     @State private var hovered = false
 
@@ -731,10 +765,11 @@ private struct CaptureHistoryRow: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "checkmark")
+                Image(systemName: failed ? "xmark" : "checkmark")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(successGreen)
-                    .opacity(copied ? 1 : 0)
+                    .foregroundStyle(failed ? AnyShapeStyle(.red) : AnyShapeStyle(successGreen))
+                    .opacity(copied || failed ? 1 : 0)
+                    .help(failed ? "Nothing left to copy — the image file is gone" : "")
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
@@ -753,10 +788,14 @@ private struct CaptureHistoryRow: View {
 private struct ShortcutRecorderButton: View {
     @EnvironmentObject var appState: AppState
     @State private var isRecording = false
+    @State private var showConflict = false
     @State private var currentShortcut: KeyboardShortcutModel
 
     private let defaultShortcut: KeyboardShortcutModel
     private let onUpdate: (AppState, KeyboardShortcutModel) -> Void
+    /// The app's other recorded shortcut — a captured keystroke equal to it is
+    /// rejected so dictation and annotation can't end up on the same keys.
+    private let conflictingShortcut: () -> KeyboardShortcutModel
 
     /// Defaults to the dictation shortcut for backwards compatibility.
     init(
@@ -764,11 +803,18 @@ private struct ShortcutRecorderButton: View {
         defaultShortcut: KeyboardShortcutModel = .default,
         onUpdate: @escaping (AppState, KeyboardShortcutModel) -> Void = { state, shortcut in
             state.hotkeyManager?.updateShortcut(shortcut)
+        },
+        conflictingShortcut: @escaping () -> KeyboardShortcutModel = {
+            KeyboardShortcutModel.load(
+                key: KeyboardShortcutModel.annotateDefaultsKey,
+                fallback: .annotateDefault
+            )
         }
     ) {
         self._currentShortcut = State(initialValue: initial)
         self.defaultShortcut = defaultShortcut
         self.onUpdate = onUpdate
+        self.conflictingShortcut = conflictingShortcut
     }
 
     private var isDefault: Bool { currentShortcut == defaultShortcut }
@@ -795,9 +841,11 @@ private struct ShortcutRecorderButton: View {
                 .transition(.scale.combined(with: .opacity))
             }
 
-            Button(isRecording ? "Press shortcut..." : currentShortcut.displayString) {
+            Button(buttonLabel) {
                 appState.hotkeyManager?.suspendMonitors()
+                showConflict = false
                 isRecording = true
+                appState.shortcutRecorderArmed = true
             }
             .font(.caption.monospaced())
             .controlSize(.small)
@@ -806,16 +854,42 @@ private struct ShortcutRecorderButton: View {
         .background {
             if isRecording {
                 ShortcutCaptureView { shortcut in
-                    onUpdate(appState, shortcut)
-                    currentShortcut = shortcut
                     isRecording = false
+                    appState.shortcutRecorderArmed = false
                     appState.hotkeyManager?.resumeMonitors()
+                    if shortcut == conflictingShortcut() {
+                        showConflict = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.5))
+                            showConflict = false
+                        }
+                    } else {
+                        onUpdate(appState, shortcut)
+                        currentShortcut = shortcut
+                    }
                 } onCancel: {
                     isRecording = false
+                    appState.shortcutRecorderArmed = false
                     appState.hotkeyManager?.resumeMonitors()
                 }
             }
         }
+        .onDisappear {
+            // The popover can close (or settings can flip away) with the
+            // recorder still armed — without this the suspended global
+            // shortcuts would stay dead until the next capture or relaunch.
+            if isRecording {
+                isRecording = false
+                appState.shortcutRecorderArmed = false
+                appState.hotkeyManager?.resumeMonitors()
+            }
+        }
+    }
+
+    private var buttonLabel: String {
+        if isRecording { return "Press shortcut..." }
+        if showConflict { return "Already in use" }
+        return currentShortcut.displayString
     }
 }
 
@@ -949,6 +1023,45 @@ private struct ScreenRecordingNotGrantedBanner: View {
 
                 Button("Open Screen Recording Settings") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .font(.system(size: 11))
+                .controlSize(.small)
+                .padding(.top, 1)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.orange.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Files Not Granted Banner
+
+private struct FilesNotGrantedBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Screenshot folder not readable")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                Text("Relay can't read the folder screenshots are saved to, so shots taken while recording won't be added. Allow Relay under Files and Folders (Desktop), or grant Full Disk Access.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Open Files and Folders Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
                         NSWorkspace.shared.open(url)
                     }
                 }
