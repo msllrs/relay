@@ -31,6 +31,7 @@ final class PreRollAudioService: @unchecked Sendable {
 
     private let state = Mutex(State())
     private var capture: (any AudioCaptureSource)?
+    private var startRetry: DispatchWorkItem?
     private let controlQueue = DispatchQueue(label: "com.msllrs.relay.preroll-control")
     private var observers: [NSObjectProtocol] = []
 
@@ -79,29 +80,49 @@ final class PreRollAudioService: @unchecked Sendable {
     /// Start or stop the warm capture to match (enabled && !suspended).
     private func reconcile(forceRestart: Bool = false) {
         controlQueue.async { [self] in
+            startRetry?.cancel()
+            startRetry = nil
             let (shouldRun, deviceID) = state.withLock { ($0.enabled && !$0.suspended, $0.deviceID) }
 
             if !shouldRun {
-                capture?.stop()
-                capture = nil
-                state.withLock { $0.ring.removeAll() }
+                stopCapture()
                 return
             }
             if forceRestart {
-                capture?.stop()
-                capture = nil
+                stopCapture()
             }
             guard capture == nil else { return }
+            startCapture(deviceID: deviceID, isRetry: false)
+        }
+    }
 
-            let source = AudioCaptureSourceFactory.make()
-            do {
-                try source.start(deviceID: deviceID, onBuffer: { [weak self] buffer in
-                    self?.append(buffer)
-                }, onLevel: { _ in })
-                capture = source
-            } catch {
-                NSLog("PreRollAudioService: warm capture failed to start: %@", error.localizedDescription)
+    private func stopCapture() {
+        capture?.stop()
+        capture = nil
+        state.withLock { $0.ring.removeAll() }
+    }
+
+    private func startCapture(deviceID: AudioDeviceID?, isRetry: Bool) {
+        let source = AudioCaptureSourceFactory.make()
+        do {
+            try source.start(deviceID: deviceID, onBuffer: { [weak self] buffer in
+                self?.append(buffer)
+            }, onLevel: { _ in })
+            capture = source
+        } catch {
+            if isRetry {
+                NSLog("PreRollAudioService: warm capture retry failed, giving up: %@", error.localizedDescription)
+                return
             }
+            NSLog("PreRollAudioService: warm capture failed to start: %@", error.localizedDescription)
+            let work = DispatchWorkItem { [self] in
+                startRetry = nil
+                let (shouldRun, deviceID) = state.withLock { ($0.enabled && !$0.suspended, $0.deviceID) }
+                guard shouldRun, capture == nil else { return }
+                startCapture(deviceID: deviceID, isRetry: true)
+            }
+            startRetry = work
+            controlQueue.asyncAfter(deadline: .now() + 2, execute: work)
         }
     }
 
