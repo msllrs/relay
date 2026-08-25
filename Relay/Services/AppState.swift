@@ -165,10 +165,16 @@ final class AppState: ObservableObject {
                 }
             } catch {
                 NSLog("Launch at login toggle failed: %@", error.localizedDescription)
+                launchAtLoginErrorMessage = error.localizedDescription
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
         }
     }
+    /// Why the last launch-at-login toggle was reverted, for the settings row.
+    @Published var launchAtLoginErrorMessage: String?
+    /// True while a shortcut recorder is capturing — the popover's own key
+    /// shortcuts step aside so the keystroke reaches the recorder.
+    @Published var shortcutRecorderArmed = false
     @Published var promptFormat: PromptFormat {
         didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
     }
@@ -1307,6 +1313,16 @@ final class AppState: ObservableObject {
         if outputHistory.count > 20 {
             outputHistory.removeLast(outputHistory.count - 20)
         }
+    }
+
+    /// Erase one of the rolling history lists (and any images only it kept).
+    func clearHistory(outputs: Bool) {
+        if outputs {
+            outputHistory.removeAll()
+        } else {
+            captureHistory.removeAll()
+        }
+        pruneHistoryImages()
     }
 
     /// Copy a history entry back to the clipboard. Returns false — leaving the
