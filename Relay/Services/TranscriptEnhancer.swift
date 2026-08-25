@@ -218,17 +218,11 @@ enum TranscriptEnhancer {
 
         // Add trailing period if text doesn't end with punctuation
         let trimmed = working.trimmingCharacters(in: .whitespaces)
-        if let last = trimmed.last, !".!?".contains(last) && last != "\u{FFFC}".first {
-            // Check if text ends with a sentinel (ref marker at the end)
-            let stripped = trimmed.replacingOccurrences(of: sentinel, with: "").trimmingCharacters(in: .whitespaces)
-            if let realLast = stripped.last, !".!?".contains(realLast) {
-                if trimmed.hasSuffix(sentinel) {
-                    working = addTrailingPeriod(trimmed, sentinel: sentinel)
-                } else {
-                    working = trimmed + "."
-                }
+        if let last = trimmed.last, !".!?".contains(last) {
+            if trimmed.hasSuffix(sentinel) {
+                working = addTrailingPeriod(trimmed, sentinel: sentinel)
             } else {
-                working = trimmed
+                working = trimmed + "."
             }
         } else {
             working = trimmed

@@ -69,6 +69,7 @@ enum WordRules {
             working = cleanup(working)
         }
 
+        let beforeRemappings = working
         for rule in activeRemappings {
             let escaped = NSRegularExpression.escapedPattern(for: rule.match)
             let pattern = "(?<!\\w)\(escaped)(?!\\w)"
@@ -79,6 +80,13 @@ enum WordRules {
             let range = NSRange(working.startIndex..., in: working)
             working = regex.stringByReplacingMatches(in: working, range: range, withTemplate: template)
         }
+        if working != beforeRemappings {
+            working = cleanup(working)
+        }
+
+        // A rule that matched a sentinel would silently delete its ref marker;
+        // skip the rules entirely rather than lose a chip.
+        guard working.ranges(of: sentinel).count == refs.count else { return text }
 
         for ref in refs {
             if let range = working.range(of: sentinel) {
