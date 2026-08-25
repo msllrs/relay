@@ -26,7 +26,7 @@ final class VoiceManager: ObservableObject {
     var inputDeviceID: AudioDeviceID?
 
     private nonisolated(unsafe) var activeEngine: any SpeechEngine
-    private var previousInputVolume: Float?
+    private var previousInputVolume: (volume: Float, deviceID: AudioDeviceID?)?
 
     /// Cached engine instances so downloaded models survive engine switching.
     private var engineCache: [SpeechEngineType: any SpeechEngine] = [:]
@@ -122,7 +122,7 @@ final class VoiceManager: ObservableObject {
         downloadComplete = false
     }
 
-    func startRecording() {
+    func startRecording(onStartFailure: (@MainActor () -> Void)? = nil) {
         guard !isRecording else { return }
 
         error = nil
@@ -163,11 +163,15 @@ final class VoiceManager: ObservableObject {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.isRecording = false
                 }
+                onStartFailure?()
+                return
             }
 
             // Max mic volume after engine starts (so it doesn't interfere with audio session setup)
             if UserDefaults.standard.object(forKey: "maxMicOnRecord") == nil || UserDefaults.standard.bool(forKey: "maxMicOnRecord") {
-                self.previousInputVolume = SystemAudioHelper.getInputVolume(deviceID: deviceID)
+                if let volume = SystemAudioHelper.getInputVolume(deviceID: deviceID) {
+                    self.previousInputVolume = (volume, deviceID)
+                }
                 SystemAudioHelper.setInputVolume(1.0, deviceID: deviceID)
             }
         }
@@ -187,12 +191,11 @@ final class VoiceManager: ObservableObject {
                 let transcription = try await engine.stopAndTranscribe()
                 self.restoreInputVolume()
                 self.partialTranscription = ""
-                if !transcription.isEmpty {
-                    onComplete(transcription)
-                }
+                onComplete(transcription)
             } catch {
                 self.restoreInputVolume()
                 self.error = error.localizedDescription
+                onComplete("")
             }
         }
     }
@@ -243,9 +246,9 @@ final class VoiceManager: ObservableObject {
         }
     }
 
-    private func restoreInputVolume() {
-        if let volume = previousInputVolume {
-            SystemAudioHelper.setInputVolume(volume, deviceID: inputDeviceID)
+    func restoreInputVolume() {
+        if let previous = previousInputVolume {
+            SystemAudioHelper.setInputVolume(previous.volume, deviceID: previous.deviceID)
             previousInputVolume = nil
         }
     }
