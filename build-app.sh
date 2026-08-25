@@ -68,10 +68,17 @@ cp ".build/${CONFIG}/Relay" "$APP_DIR/MacOS/Relay"
 # <app>/Contents/MacOS/relay-mcp-server.
 cp ".build/${CONFIG}/relay-mcp-server" "$APP_DIR/MacOS/relay-mcp-server"
 
-# Copy asset bundle if it exists
-if [ -d ".build/${CONFIG}/Relay_Relay.bundle" ]; then
-    cp -R ".build/${CONFIG}/Relay_Relay.bundle" "$APP_DIR/Resources/"
-fi
+# Copy every SwiftPM resource bundle (Relay's own plus dependencies') into
+# Contents/Resources — library targets resolve Bundle.module via
+# Bundle.main.resourceURL, so a missing bundle crashes at first resource access.
+for bundle in ".build/${CONFIG}"/*.bundle; do
+    if [ -d "$bundle" ]; then
+        cp -R "$bundle" "$APP_DIR/Resources/"
+    fi
+done
+# Dependency bundles come from read-only SwiftPM checkouts; cp -R preserves
+# that, which breaks the later xattr -cr and codesign steps.
+chmod -R u+w "$APP_DIR/Resources"
 
 # Copy app icon
 cp "Relay/Resources/${ICON_FILE}" "$APP_DIR/Resources/AppIcon.icns"
