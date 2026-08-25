@@ -140,14 +140,6 @@ final class AnnotationManager: ObservableObject {
         isMultiMode = false
     }
 
-    // MARK: - Recording auto-arm
-
-    /// Currently a no-op: while recording, the user holds the same annotation
-    /// shortcut to draw, which routes through begin/finishHold like the
-    /// standalone path. Kept for the AppState recording sink to call.
-    func armForRecording() {}
-    func disarmForRecording() { endSession() }
-
     // MARK: - Stroke input (called by the drawing view)
 
     func beginStroke(on screen: NSScreen) {
@@ -207,7 +199,10 @@ final class AnnotationManager: ObservableObject {
             // Capture succeeded — clear any stale "needs permission" banner that
             // preflight may have set.
             appState?.needsScreenRecordingPermission = false
-            guard let path = capture.cropAndSave(full, pixelRect: pixelRect, strokes: strokes, screen: screen) else { return }
+            guard let path = capture.cropAndSave(full, pixelRect: pixelRect, strokes: strokes, screen: screen) else {
+                NSLog("AnnotationManager: crop/save failed — annotation dropped")
+                return
+            }
             appState?.addItem(ClipboardItem(
                 contentType: .annotation,
                 textContent: shape.intentLabel,
