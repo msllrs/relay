@@ -3,6 +3,20 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.9.1</title>
+            <pubDate>Tue, 25 Aug 2026 08:49:13 +0000</pubDate>
+            <sparkle:version>244</sparkle:version>
+            <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[## Fixed
+
+- **Instant crash at startup on fresh installs** ([#3](https://github.com/msllrs/relay/issues/3)) — Relay looked for its bundled recording sounds in a location that only existed on the machine that built it, so every installed copy crashed the moment it launched. Resources now resolve from inside the app bundle, backed by a packaging regression test that simulates a clean user machine
+- All dependency resource bundles are now packaged into the app as well, closing off the same class of crash if a bundled library ever loads its own resources
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.9.1/Relay-v0.9.1.zip" length="8519448" type="application/octet-stream" sparkle:edSignature="y01FOTQI82/ec6DDTYsSp5Jp7VIpKB8RcyqRfQsEqOUohawlKGnCxrpedWK+35p47cirmxJtcmVV8fHvO0xnCQ=="/>
+        </item>
+        <item>
             <title>0.9.0</title>
             <pubDate>Thu, 06 Aug 2026 11:53:38 +0000</pubDate>
             <sparkle:version>237</sparkle:version>
