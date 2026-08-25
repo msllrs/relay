@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Shared visibility state between RecordingOverlayController and the SwiftUI view,
@@ -5,6 +6,9 @@ import SwiftUI
 @MainActor
 final class OverlayVisibility: ObservableObject {
     @Published var visible = false
+    /// Set by the controller when a press crossed the drag threshold, so the
+    /// mouse-up that ends a reposition is not read as a stop tap.
+    var suppressTap = false
 }
 
 struct MiniWaveformView: View {
@@ -13,6 +17,10 @@ struct MiniWaveformView: View {
     private let barWidth: CGFloat = 3
     private let barSpacing: CGFloat = 2.5
     private let seeds: [Double] = [0.7, 1.0, 0.8]
+
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
 
     var body: some View {
         HStack(spacing: barSpacing) {
@@ -25,7 +33,7 @@ struct MiniWaveformView: View {
             }
         }
         .frame(height: 14)
-        .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: level)
+        .animation(reduceMotion ? nil : Animation.interpolatingSpring(stiffness: 300, damping: 15), value: level)
     }
 }
 
@@ -88,6 +96,28 @@ struct RecordingOverlayView: View {
         return .waveform
     }
 
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private var contentAnimation: Animation? {
+        guard !reduceMotion else { return nil }
+        return visibility.visible
+            ? .easeOut(duration: 0.2).delay(0.15)
+            : .easeOut(duration: 0.1)
+    }
+
+    private var spawnAnimation: Animation? {
+        guard !reduceMotion else { return nil }
+        return visibility.visible
+            ? .spring(response: 0.4, dampingFraction: 0.68)
+            : .spring(response: 0.25, dampingFraction: 0.9)
+    }
+
+    private var modeAnimation: Animation? {
+        reduceMotion ? nil : Animation.easeInOut(duration: 0.2)
+    }
+
     var body: some View {
         ZStack {
             // Base fill
@@ -132,32 +162,23 @@ struct RecordingOverlayView: View {
             }
             // Contents reveal just after the bubble finishes growing.
             .opacity(visibility.visible ? 1 : 0)
-            .animation(
-                visibility.visible
-                    ? .easeOut(duration: 0.2).delay(0.15)
-                    : .easeOut(duration: 0.1),
-                value: visibility.visible
-            )
+            .animation(contentAnimation, value: visibility.visible)
         }
         .frame(width: circleSize, height: circleSize)
         // Spawn: emerge from beneath the menubar icon, growing downward with a
         // springy overshoot. Retract: shrink back up into the bar.
         .scaleEffect(visibility.visible ? 1 : 0.05, anchor: .top)
         .opacity(visibility.visible ? 1 : 0)
-        .animation(
-            visibility.visible
-                ? .spring(response: 0.4, dampingFraction: 0.68)
-                : .spring(response: 0.25, dampingFraction: 0.9),
-            value: visibility.visible
-        )
+        .animation(spawnAnimation, value: visibility.visible)
         .padding(10) // room for shadow
         .contentShape(Circle())
         .onHover { hovering in
             isHovering = hovering
         }
         .onTapGesture {
+            guard !visibility.suppressTap else { return }
             appState.finishDictationAndStop()
         }
-        .animation(.easeInOut(duration: 0.2), value: mode)
+        .animation(modeAnimation, value: mode)
     }
 }

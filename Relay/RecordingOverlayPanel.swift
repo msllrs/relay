@@ -12,6 +12,7 @@ final class RecordingOverlayController {
     private var dragMonitor: Any?
     private var dragStartOrigin: NSPoint?
     private var dragStartMouse: NSPoint?
+    private var isDragging = false
     private let visibility = OverlayVisibility()
     private var hideTask: Task<Void, Never>?
 
@@ -43,6 +44,7 @@ final class RecordingOverlayController {
     func show(below statusItemButton: NSStatusBarButton) {
         hideTask?.cancel()
         hideTask = nil
+        visibility.suppressTap = false
         self.statusItemButton = statusItemButton
         let origin = defaultOrigin()
         cachedDefaultOrigin = origin
@@ -60,9 +62,20 @@ final class RecordingOverlayController {
     }
 
     func hide() {
+        if isDragging {
+            customOrigin = panel.frame.origin
+        }
+        dragStartOrigin = nil
+        dragStartMouse = nil
+        isDragging = false
         removeDragMonitor()
         visibility.visible = false
         hideTask?.cancel()
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            hideTask = nil
+            panel.orderOut(nil)
+            return
+        }
         // Keep the panel on screen until the SwiftUI retract animation finishes.
         hideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -96,55 +109,63 @@ final class RecordingOverlayController {
     // MARK: - Drag handling
 
     private func installDragMonitor() {
+        removeDragMonitor()
         let panelRef = panel
-        nonisolated(unsafe) var startOrigin: NSPoint?
-        nonisolated(unsafe) var startMouse: NSPoint?
-        nonisolated(unsafe) var isTracking = false
-        nonisolated(unsafe) var isDragging = false
 
         dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
             switch event.type {
             case .leftMouseDown:
                 // Only start tracking if the click is on our panel
                 guard event.window === panelRef else { return event }
-                startOrigin = panelRef.frame.origin
-                startMouse = NSEvent.mouseLocation
-                isTracking = true
-                isDragging = false
-                return event
-
+                MainActor.assumeIsolated {
+                    self?.beginTracking()
+                }
             case .leftMouseDragged:
-                guard isTracking, let origin = startOrigin, let mouse = startMouse else { return event }
-                let current = NSEvent.mouseLocation
-                let dx = current.x - mouse.x
-                let dy = current.y - mouse.y
-
-                if !isDragging {
-                    // Only start dragging after 3pt movement to preserve tap gesture
-                    guard sqrt(dx * dx + dy * dy) > 3 else { return event }
-                    isDragging = true
+                MainActor.assumeIsolated {
+                    self?.continueTracking()
                 }
-
-                panelRef.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y + dy))
-                return event
-
             case .leftMouseUp:
-                guard isTracking else { return event }
-                if isDragging {
-                    MainActor.assumeIsolated {
-                        self?.commitDragPosition()
-                    }
+                MainActor.assumeIsolated {
+                    self?.endTracking()
                 }
-                startOrigin = nil
-                startMouse = nil
-                isTracking = false
-                isDragging = false
-                return event
-
             default:
-                return event
+                break
             }
+            return event
         }
+    }
+
+    private func beginTracking() {
+        visibility.suppressTap = false
+        dragStartOrigin = panel.frame.origin
+        dragStartMouse = NSEvent.mouseLocation
+        isDragging = false
+    }
+
+    private func continueTracking() {
+        guard let origin = dragStartOrigin, let start = dragStartMouse else { return }
+        let current = NSEvent.mouseLocation
+        let dx = current.x - start.x
+        let dy = current.y - start.y
+
+        if !isDragging {
+            // Only start dragging after 3pt movement to preserve tap gesture
+            guard sqrt(dx * dx + dy * dy) > 3 else { return }
+            isDragging = true
+            visibility.suppressTap = true
+        }
+
+        panel.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y + dy))
+    }
+
+    private func endTracking() {
+        guard dragStartMouse != nil else { return }
+        if isDragging {
+            commitDragPosition()
+        }
+        dragStartOrigin = nil
+        dragStartMouse = nil
+        isDragging = false
     }
 
     private func removeDragMonitor() {
@@ -155,25 +176,35 @@ final class RecordingOverlayController {
     }
 
     private func commitDragPosition() {
-        if let center = statusItemCenter() {
-            let panelCenter = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
-            let dx = panelCenter.x - center.x
-            let dy = panelCenter.y - center.y
-            let distance = sqrt(dx * dx + dy * dy)
+        let panelCenter = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        let home = defaultOrigin()
+        let homeCenter = NSPoint(x: home.x + panelSize / 2, y: home.y + panelSize / 2)
+        var distance = distanceBetween(panelCenter, homeCenter)
+        if let iconCenter = statusItemCenter() {
+            distance = min(distance, distanceBetween(panelCenter, iconCenter))
+        }
 
-            if distance < 40 {
-                customOrigin = nil
-                let target = defaultOrigin()
-                cachedDefaultOrigin = target
-                animateOrigin(to: target)
-                return
-            }
+        if distance < 40 {
+            customOrigin = nil
+            cachedDefaultOrigin = home
+            animateOrigin(to: home)
+            return
         }
         customOrigin = panel.frame.origin
     }
 
+    private func distanceBetween(_ a: NSPoint, _ b: NSPoint) -> CGFloat {
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        return sqrt(dx * dx + dy * dy)
+    }
+
     /// Animate panel origin with async frame stepping.
     private func animateOrigin(to target: NSPoint) {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.setFrameOrigin(target)
+            return
+        }
         let start = panel.frame.origin
         let duration: CFTimeInterval = 0.2
         let startTime = CACurrentMediaTime()
