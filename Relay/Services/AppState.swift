@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 import Foundation
 import ServiceManagement
@@ -40,7 +41,9 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(recordingSoundTheme.rawValue, forKey: "recordingSoundTheme")
             soundFeedback.setTheme(recordingSoundTheme)
             // Immediate audition when picking from the settings menu
-            soundFeedback.playStart()
+            if recordingSounds {
+                soundFeedback.playStart()
+            }
         }
     }
     /// Opt-in: lower the system output volume while recording so music or
@@ -64,6 +67,13 @@ final class AppState: ObservableObject {
     /// so the detector adapts to mic gain and distance.
     private var sessionPeakLevel: Float = 0
     private var silenceGate = SilenceGate()
+    /// Whether the in-flight session is ended by a key release. Latched at
+    /// start: a URL-triggered session holds no key even when push-to-talk is
+    /// on, so the silence gate must stay armed for it.
+    private var sessionUsesPushToTalk = false
+    /// Set by cancelDictation so the recording-end chirp stays quiet — an
+    /// eyes-free user should be able to tell a discard from a kept stop.
+    private var suppressStopChirp = false
     @Published var hotkeyStartsDictation: Bool {
         didSet { UserDefaults.standard.set(hotkeyStartsDictation, forKey: "hotkeyStartsDictation") }
     }
@@ -77,7 +87,14 @@ final class AppState: ObservableObject {
     /// the stack automatically, saving users from needing to know that ⌃
     /// sends a capture to the clipboard.
     @Published var captureScreenshotsWhileRecording: Bool {
-        didSet { UserDefaults.standard.set(captureScreenshotsWhileRecording, forKey: "captureScreenshotsWhileRecording") }
+        didSet {
+            UserDefaults.standard.set(captureScreenshotsWhileRecording, forKey: "captureScreenshotsWhileRecording")
+            // Turning the toggle on mid-recording should start ingesting now,
+            // matching how turning it off stops ingestion immediately.
+            if captureScreenshotsWhileRecording, voiceManager.isRecording {
+                screenshotWatcher.start()
+            }
+        }
     }
     @Published var autoCopy: Bool {
         didSet { UserDefaults.standard.set(autoCopy, forKey: "autoCopy") }
@@ -85,8 +102,14 @@ final class AppState: ObservableObject {
     @Published var autoPasteAfterCopy: Bool {
         didSet {
             UserDefaults.standard.set(autoPasteAfterCopy, forKey: "autoPasteAfterCopy")
-            if autoPasteAfterCopy && !AXIsProcessTrusted() {
-                promptForAccessibility()
+            if autoPasteAfterCopy {
+                if !AXIsProcessTrusted() {
+                    promptForAccessibility()
+                } else if !CGPreflightPostEventAccess() {
+                    // Accessibility can be granted while the post-event gate
+                    // holds a stale silent deny (typical after an update).
+                    _ = CGRequestPostEventAccess()
+                }
             }
         }
     }
@@ -266,6 +289,23 @@ final class AppState: ObservableObject {
     @Published var accessibilityBroken = false
     @Published var accessibilityNotGranted = false
     @Published var needsScreenRecordingPermission = false
+    /// Screenshot ingestion watches TCC-protected folders; Spotlight silently
+    /// filters unreadable ones, so an explicit check is the only signal.
+    @Published var needsFilesPermission = false
+
+    /// Undo session-scoped system changes before the process goes away —
+    /// nothing else runs on quit, and ducked output or a maxed mic would
+    /// otherwise stay that way.
+    func prepareForTermination() {
+        if let restore = preDuckOutputVolume {
+            SystemAudioHelper.setOutputVolume(restore)
+            preDuckOutputVolume = nil
+        }
+        voiceManager.restoreInputVolume()
+        if mcpBridgeEnabled {
+            mcpBridgeWriter?.stop()
+        }
+    }
 
     /// Sync the activation policy with the Show in Dock setting. LSUIElement
     /// already makes the app accessory at launch, so this only matters when the
@@ -341,6 +381,7 @@ final class AppState: ObservableObject {
     private var recordingStartTime: Date?
     private var copiedConfirmationTask: Task<Void, Never>?
     private var clearAfterCopyTask: Task<Void, Never>?
+    private var screenshotStopTask: Task<Void, Never>?
 
     let voiceManager = VoiceManager()
     /// Strike-then-remove treatment for live self-corrections (display only).
@@ -585,9 +626,10 @@ final class AppState: ObservableObject {
                         SystemAudioHelper.setOutputVolume(restore)
                         self.preDuckOutputVolume = nil
                     }
-                    if self.recordingSounds {
+                    if self.recordingSounds && !self.suppressStopChirp {
                         self.soundFeedback.playStop()
                     }
+                    self.suppressStopChirp = false
                 }
             }
             .store(in: &cancellables)
@@ -599,13 +641,15 @@ final class AppState: ObservableObject {
             .sink { [weak self] level in
                 guard let self,
                       self.autoStopOnSilence,
-                      !self.pushToTalk,
+                      !self.sessionUsesPushToTalk,
                       self.voiceManager.isRecording else {
                     self?.silenceGate.reset()
                     return
                 }
                 self.sessionPeakLevel = max(self.sessionPeakLevel, level)
-                guard !self.voiceManager.partialTranscription.isEmpty else { return }
+                // Arm only once something has been transcribed *this* session —
+                // text spoken before a mid-session clear doesn't count.
+                guard self.voiceManager.partialTranscription.count > self.transcriptionTrimOffset else { return }
 
                 let threshold = max(0.015, self.sessionPeakLevel * 0.15)
                 let silentFor = self.silenceGate.process(isQuiet: level < threshold)
@@ -621,29 +665,29 @@ final class AppState: ObservableObject {
             guard let self, self.captureScreenshotsWhileRecording else { return }
             self.addItem(.fromFileURL(url))
         }
+        screenshotWatcher.onScopeUnreadable = { [weak self] in
+            self?.needsFilesPermission = true
+        }
         voiceManager.$isRecording
             .removeDuplicates()
             .sink { [weak self] recording in
                 guard let self else { return }
-                if recording && self.captureScreenshotsWhileRecording {
-                    self.screenshotWatcher.start()
-                } else {
-                    self.screenshotWatcher.stop()
-                }
-            }
-            .store(in: &cancellables)
-
-        // Arm/disarm the click-through annotation overlay around recording.
-        voiceManager.$isRecording
-            .dropFirst()
-            .sink { [weak self] recording in
-                guard let self else { return }
                 if recording {
-                    if self.annotationEnabled && self.annotateWhileRecording {
-                        self.annotationManager?.armForRecording()
+                    self.screenshotStopTask?.cancel()
+                    self.screenshotStopTask = nil
+                    if self.captureScreenshotsWhileRecording {
+                        self.screenshotWatcher.start()
                     }
                 } else {
-                    self.annotationManager?.disarmForRecording()
+                    // Keep watching for a few seconds past the stop — the
+                    // screenshot thumbnail delay plus Spotlight indexing lag
+                    // means shots taken at the end of a session land late.
+                    self.screenshotStopTask?.cancel()
+                    self.screenshotStopTask = Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(3))
+                        guard !Task.isCancelled, let self, !self.voiceManager.isRecording else { return }
+                        self.screenshotWatcher.stop()
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -791,6 +835,7 @@ final class AppState: ObservableObject {
     /// Push-to-draw: begin a session and end (or commit) it when released.
     func annotateHotkeyTriggered() {
         guard annotationEnabled else { return }
+        if voiceManager.isRecording && !annotateWhileRecording { return }
         let wasActive = annotationManager?.isSessionActive == true
         annotationManager?.beginHold()
         guard annotationManager?.isSessionActive == true else { return }
@@ -810,10 +855,10 @@ final class AppState: ObservableObject {
 
     /// Called by HotkeyManager when the keyboard shortcut is pressed.
     func hotkeyTriggered() {
-        if isMonitoring && voiceManager.isRecording {
+        if voiceManager.isRecording {
             // Already recording → stop, save transcription, stop monitoring
             finishDictationAndStop()
-        } else if hotkeyStartsDictation && !isMonitoring {
+        } else if hotkeyStartsDictation {
             startDictation()
         } else {
             toggleMonitoring()
@@ -840,11 +885,23 @@ final class AppState: ObservableObject {
         recordingStartTime = Date()
         sessionPeakLevel = 0
         silenceGate.reset()
+        sessionUsesPushToTalk = installPushToTalkMonitor && pushToTalk
         // Reserve a placeholder in the stack so the voice note keeps its position
         let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
         activeVoiceNoteID = placeholder.id
         stack.add(placeholder)
-        voiceManager.startRecording()
+        voiceManager.startRecording(onStartFailure: { [weak self] in
+            // The engine never started (permission denied, model missing):
+            // release the reservation so the next start trigger works.
+            guard let self, self.activeVoiceNoteID == placeholder.id else { return }
+            self.stack.remove(id: placeholder.id)
+            self.activeVoiceNoteID = nil
+            self.hotkeyManager?.stopEscMonitor()
+            self.hotkeyManager?.stopKeyUpMonitor()
+            if !self.alwaysOnMonitoring {
+                self.stopMonitoring()
+            }
+        })
         // Install Esc monitor to cancel
         hotkeyManager?.startEscMonitor { [weak self] in
             withAnimation(.easeInOut(duration: 0.25)) {
@@ -907,6 +964,11 @@ final class AppState: ObservableObject {
         let trimOffset = transcriptionTrimOffset
         transcriptionTrimOffset = 0
         let generationAtStop = dictationGeneration
+        // Measure the session length now — the engine's final transcription
+        // below can take seconds, and an inflated denominator would slide
+        // every ref chip toward the start of the transcript.
+        let elapsedAtStop = recordingStartTime.map { Date().timeIntervalSince($0) }
+        recordingStartTime = nil
         voiceManager.stopRecording { [weak self] fullTranscription in
             guard let self else { return }
             let transcription = trimOffset > 0
@@ -914,13 +976,13 @@ final class AppState: ObservableObject {
                     .trimmingCharacters(in: .whitespaces)
                 : fullTranscription
 
-            // Nothing new was said after a clear — remove the empty placeholder
-            if transcription.isEmpty, let id = voiceNoteID {
+            // Nothing was said (or nothing new after a clear) — remove the empty placeholder
+            if transcription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let id = voiceNoteID {
                 self.stack.remove(id: id)
                 return
             }
 
-            let markedRaw = self.insertRefMarkers(into: transcription, refs: refs)
+            let markedRaw = self.insertRefMarkers(into: transcription, refs: refs, elapsed: elapsedAtStop)
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 var working = markedRaw
@@ -928,13 +990,16 @@ final class AppState: ObservableObject {
                 // stripping, which would otherwise eat cue words like
                 // "actually". Gated on a cue so ordinary dictations skip it.
                 if self.resolveSelfCorrections, SelfCorrectionResolver.containsCue(working) {
-                    var resolved: String?
-                    // AI Polish resolves corrections itself; don't spend a
-                    // second model call when it's about to run anyway.
-                    if self.transcriptEnhancement != .aiPolish {
-                        resolved = await FoundationModelsEnhancer.resolveCorrections(working)
+                    // AI Polish resolves corrections itself; when it is about
+                    // to run, skip pre-resolution entirely — the heuristic's
+                    // blunter edits would otherwise be baked in before the
+                    // model ever sees the text.
+                    if self.transcriptEnhancement == .aiPolish, FoundationModelsEnhancer.isAvailable {
+                        // leave corrections to the polish pass
+                    } else {
+                        let resolved = await FoundationModelsEnhancer.resolveCorrections(working)
+                        working = resolved ?? SelfCorrectionResolver.resolve(working)
                     }
-                    working = resolved ?? SelfCorrectionResolver.resolve(working)
                 }
                 let markedInput = WordRules.apply(
                     working,
@@ -985,21 +1050,31 @@ final class AppState: ObservableObject {
                 }
             }
         }
-        stopMonitoring()
+        if !alwaysOnMonitoring {
+            stopMonitoring()
+        }
     }
 
     func cancelDictation() {
         hotkeyManager?.stopEscMonitor()
         hotkeyManager?.stopKeyUpMonitor()
+        // The world changed under any pending finalize from an older session.
+        dictationGeneration += 1
         pendingRefs = []
+        recordingStartTime = nil
         // Restore display to frozen text (discard current session only)
         displayTranscription = frozenTranscription
         if let id = activeVoiceNoteID {
             stack.remove(id: id)
             activeVoiceNoteID = nil
         }
+        if voiceManager.isRecording {
+            suppressStopChirp = true
+        }
         voiceManager.cancelRecording()
-        stopMonitoring()
+        if !alwaysOnMonitoring {
+            stopMonitoring()
+        }
     }
 
     /// Session ID of the most recent clipboard write, for restore ownership checks.
@@ -1044,7 +1119,7 @@ final class AppState: ObservableObject {
         keyUp?.post(tap: .cgSessionEventTap)
     }
 
-    private func insertRefMarkers(into text: String, refs: [PendingRef]) -> String {
+    private func insertRefMarkers(into text: String, refs: [PendingRef], elapsed: TimeInterval? = nil) -> String {
         guard !refs.isEmpty else { return text }
 
         // Build a map of non-voice-note indices (1-based)
@@ -1061,7 +1136,7 @@ final class AppState: ObservableObject {
         // This works for all engines: Native streams text continuously so the
         // proportion is accurate, while Parakeet delivers text in chunks so
         // time-based positioning distributes chips correctly.
-        let totalElapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 1
+        let totalElapsed = elapsed ?? recordingStartTime.map { Date().timeIntervalSince($0) } ?? 1
         let textLength = text.count
 
         var markers: [(charOffset: Int, refText: String)] = []
@@ -1111,6 +1186,7 @@ final class AppState: ObservableObject {
 
     /// Add an item to the stack, record a ref marker if recording, and flash the badge.
     func addItem(_ item: ClipboardItem) {
+        renumberRefsForImpendingEviction()
         let wasEmpty = displayTranscription.isEmpty && !stack.hasNonVoiceItems
         if wasEmpty {
             withAnimation(.easeInOut(duration: 0.25)) {
@@ -1122,6 +1198,29 @@ final class AppState: ObservableObject {
         recordRefMarker(for: item.id)
         notifyItemAdded()
         recordInHistory(item)
+    }
+
+    /// Adding to a full stack silently evicts the oldest item; markers already
+    /// frozen into transcripts would keep its number and point at the wrong
+    /// item. Strip and renumber for the evicted item the way removeRef does.
+    private func renumberRefsForImpendingEviction() {
+        guard stack.isAtLimit, let evicted = stack.items.first else { return }
+        pendingRefs.removeAll { $0.itemID == evicted.id }
+        guard evicted.contentType != .voiceNote else { return }
+        let nonVoiceItems = stack.items.filter { $0.contentType != .voiceNote }
+        guard let index = nonVoiceItems.firstIndex(where: { $0.id == evicted.id }) else { return }
+        let refIndex = index + 1
+        frozenTranscription = stripAndRenumberRef(in: frozenTranscription, removedIndex: refIndex)
+        for item in stack.items where item.contentType == .voiceNote {
+            if let text = item.textContent {
+                stack.update(id: item.id, textContent: stripAndRenumberRef(in: text, removedIndex: refIndex))
+            }
+        }
+        if voiceManager.isRecording {
+            rebuildDisplayTranscription()
+        } else if !displayTranscription.isEmpty {
+            displayTranscription = frozenTranscription
+        }
     }
 
     /// Append a capture to the rolling history (newest first, capped at 20).
@@ -1140,13 +1239,49 @@ final class AppState: ObservableObject {
             contentType: item.contentType,
             preview: preview,
             textContent: item.textContent,
-            imagePath: item.imagePath,
+            imagePath: item.imagePath.flatMap(Self.stabilizeImageForHistory),
             timestamp: item.timestamp,
             sourceAppName: item.contentType == .voiceNote ? lastExternalApp?.localizedName : nil
         )
         captureHistory.insert(entry, at: 0)
         if captureHistory.count > 20 {
             captureHistory.removeLast(captureHistory.count - 20)
+        }
+        pruneHistoryImages()
+    }
+
+    private static let historyImagesDirectory = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Relay", isDirectory: true)
+        .appendingPathComponent("history-images", isDirectory: true)
+
+    /// History persists across reboots, but captured images live in the temp
+    /// directory that macOS purges. Copy the file somewhere as durable as the
+    /// history that references it.
+    private static func stabilizeImageForHistory(_ path: String) -> String? {
+        let source = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        try? FileManager.default.createDirectory(at: historyImagesDirectory, withIntermediateDirectories: true)
+        let destination = historyImagesDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(source.pathExtension.isEmpty ? "png" : source.pathExtension)
+        do {
+            try FileManager.default.copyItem(at: source, to: destination)
+            return destination.path
+        } catch {
+            NSLog("recordInHistory: could not stabilize image %@: %@", path, error.localizedDescription)
+            return path
+        }
+    }
+
+    /// Delete stabilized images no history entry references any more.
+    private func pruneHistoryImages() {
+        let referenced = Set(captureHistory.compactMap(\.imagePath) + outputHistory.compactMap(\.imagePath))
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: Self.historyImagesDirectory, includingPropertiesForKeys: nil
+        )) ?? []
+        for url in contents where !referenced.contains(url.path) {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 
@@ -1174,17 +1309,25 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Copy a history entry back to the clipboard.
-    func copyHistoryEntry(_ entry: CaptureHistoryEntry) {
+    /// Copy a history entry back to the clipboard. Returns false — leaving the
+    /// clipboard untouched — when the entry has nothing copyable left (for
+    /// example an image file that no longer exists).
+    @discardableResult
+    func copyHistoryEntry(_ entry: CaptureHistoryEntry) -> Bool {
+        // Resolve what would be written before clearing anything.
+        let image = entry.imagePath.flatMap { NSImage(contentsOfFile: $0) }
+        let text = entry.textContent
+        guard image != nil || (text?.isEmpty == false) else { return false }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        if let path = entry.imagePath, let image = NSImage(contentsOfFile: path) {
+        if let image {
             pasteboard.writeObjects([image])
-        } else if let text = entry.textContent {
+        } else if let text {
             pasteboard.setString(text, forType: .string)
         }
         // Skip the monitor's next poll so the copy doesn't re-capture itself
         lastWrittenChangeCount = pasteboard.changeCount
+        return true
     }
 
 #if DEBUG
@@ -1351,6 +1494,14 @@ final class AppState: ObservableObject {
             // any synthesized ⌘V can fire — pasting stale contents otherwise.
             if let target = self.lastWrittenChangeCount {
                 await PasteboardHelper.waitForCommit(target: target)
+            }
+            // Secure input (a password field, or an app holding the secure
+            // input session) silently swallows both the AX write and a
+            // synthesized ⌘V — skip and leave the prompt on the clipboard.
+            if IsSecureEventInputEnabled() {
+                self.preWriteSnapshot = nil
+                NSLog("autoPaste: skipped — secure input is active")
+                return
             }
             let verdict = AutoPasteGuard.decide(focusedElementPID: Self.focusedElementPID(), ownPID: getpid())
             guard verdict == .proceed else {
@@ -1566,11 +1717,18 @@ final class AppState: ObservableObject {
             // Delay the clear so the Copied banner can fully appear before content collapses.
             // This prevents the banner, divider, and transcription from overlapping mid-animation.
             clearAfterCopyTask?.cancel()
+            let idsAtCopy = Set(stack.items.map(\.id))
             clearAfterCopyTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(400))
                 guard !Task.isCancelled, let self else { return }
+                // A capture that landed during the delay was never part of
+                // what was copied — clear only what existed at copy time.
+                let newItems = self.stack.items.filter { !idsAtCopy.contains($0.id) && $0.contentType != .voiceNote }
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.clearAll()
+                    for item in newItems {
+                        self.stack.add(item)
+                    }
                 }
             }
         }
