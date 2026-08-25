@@ -10,6 +10,7 @@ final class MCPBridgeWriter {
     private var writeTask: Task<Void, Never>?
     private var signalTimer: Timer?
     private var imagePathCache: [String: String] = [:]
+    private var isRunning = false
 
     static let bridgeDirectory: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -39,6 +40,8 @@ final class MCPBridgeWriter {
 
         guard let appState else { return }
 
+        isRunning = true
+
         // objectWillChange fires before the new value is applied.
         // Delay with .receive(on:) so performWrite reads the updated state.
         appState.objectWillChange
@@ -64,6 +67,7 @@ final class MCPBridgeWriter {
     }
 
     func stop() {
+        isRunning = false
         writeTask?.cancel()
         signalTimer?.invalidate()
         signalTimer = nil
@@ -107,7 +111,7 @@ final class MCPBridgeWriter {
 
             let contentType = payload.type.flatMap(ContentType.init(rawValue:))
                 ?? ContentClassifier.classify(text: payload.text)
-            appState.stack.add(ClipboardItem(contentType: contentType, textContent: payload.text))
+            appState.addItem(ClipboardItem(contentType: contentType, textContent: payload.text))
         }
     }
 
@@ -118,11 +122,11 @@ final class MCPBridgeWriter {
         // objectWillChange fires faster than any debounce window (waveform
         // levels, partial transcripts), so a cancel-and-reschedule debounce
         // never fires and MCP clients see stale state for the whole session.
-        guard writeTask == nil else { return }
+        guard isRunning, writeTask == nil else { return }
         writeTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             writeTask = nil
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, isRunning else { return }
             performWrite()
         }
     }
