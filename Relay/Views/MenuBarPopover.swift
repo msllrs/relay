@@ -159,6 +159,26 @@ private struct MainPage: View {
             .padding(.top, appState.isRecording ? 16 : 2)
             .padding(.bottom, hasContent || appState.showCopiedConfirmation || showProcessingIndicator ? 0 : 16)
 
+            // A failed session (denied microphone, missing model) sets an
+            // error the user otherwise never sees — show it until the next
+            // session start clears it.
+            if let engineError = appState.voiceManager.error, !appState.isRecording {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                        .padding(.top, 2)
+                    Text(engineError)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .transition(.opacity)
+            }
+
             // Show a processing indicator for engines that buffer audio before transcribing
             if showProcessingIndicator {
                 HStack(spacing: 6) {
@@ -240,6 +260,10 @@ private struct MainPage: View {
         }
         .animation(.easeInOut(duration: 0.25), value: hasContent)
         .background(PopoverKeyHandler(actions: {
+            // A shortcut recorder capturing the next keystroke gets every key,
+            // including ⌘Q and Esc — otherwise the popover's own shortcuts
+            // fire (or quit the app) mid-capture.
+            guard !appState.shortcutRecorderArmed else { return [:] }
             var actions: [Int: () -> Void] = [
                 kVK_ANSI_Comma: { withAnimation(.easeInOut(duration: 0.25)) { showSettings = true } },
                 kVK_ANSI_Q: { NSApplication.shared.terminate(nil) },
@@ -255,7 +279,7 @@ private struct MainPage: View {
             return actions
         }(), bareActions: {
             var bare: [Int: () -> Void] = [:]
-            if appState.pinPopover {
+            if appState.pinPopover && !appState.shortcutRecorderArmed {
                 bare[kVK_Escape] = {
                     NSApp.keyWindow?.performClose(nil)
                 }
