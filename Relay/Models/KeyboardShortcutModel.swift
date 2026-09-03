@@ -2,10 +2,23 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 
-/// Represents a customizable keyboard shortcut with key code and modifier flags.
+/// Represents a customizable keyboard shortcut: either a chord (key code plus
+/// modifier flags) or a single modifier tapped twice (`isDoubleTap`, with
+/// `modifiers` holding that one flag and `keyCode` unused).
 struct KeyboardShortcutModel: Codable, Equatable, Sendable {
     let keyCode: UInt16
     let modifiers: UInt
+    var isDoubleTap: Bool = false
+
+    /// A "double-tap ⌘" style shortcut for one of `ModifierDoubleTapDetector.tappable`.
+    static func doubleTap(_ modifier: NSEvent.ModifierFlags) -> KeyboardShortcutModel {
+        KeyboardShortcutModel(keyCode: 0, modifiers: modifier.rawValue, isDoubleTap: true)
+    }
+
+    /// The tapped modifier when this is a double-tap shortcut.
+    var doubleTapModifier: NSEvent.ModifierFlags? {
+        isDoubleTap ? modifierFlags : nil
+    }
 
     /// Default shortcut: Cmd+Shift+R
     static let `default` = KeyboardShortcutModel(
@@ -23,16 +36,35 @@ struct KeyboardShortcutModel: Codable, Equatable, Sendable {
         NSEvent.ModifierFlags(rawValue: modifiers).intersection(.deviceIndependentFlagsMask)
     }
 
-    /// Human-readable display string using Unicode modifier symbols.
+    /// Human-readable display string using Unicode modifier symbols. A
+    /// double-tap shows its modifier twice ("⌘⌘").
     var displayString: String {
+        if isDoubleTap {
+            let symbol = Self.symbol(for: modifierFlags)
+            return symbol.count == 1 ? symbol + symbol : "\(symbol) \(symbol)"
+        }
+        return Self.symbols(for: modifierFlags) + keyName
+    }
+
+    /// The popover's idle prompt: "Press ⌘⇧R" for a chord, "Double-tap ⌘" for a tap.
+    var startPrompt: String {
+        isDoubleTap ? "Double-tap \(Self.symbol(for: modifierFlags))" : "Press \(displayString)"
+    }
+
+    /// Unicode symbols for every modifier in `flags`, in the standard macOS order.
+    static func symbols(for flags: NSEvent.ModifierFlags) -> String {
         var parts: [String] = []
-        let flags = modifierFlags
         if flags.contains(.control) { parts.append("\u{2303}") }
         if flags.contains(.option) { parts.append("\u{2325}") }
         if flags.contains(.shift) { parts.append("\u{21E7}") }
         if flags.contains(.command) { parts.append("\u{2318}") }
-        parts.append(keyName)
+        if flags.contains(.function) { parts.append("fn") }
         return parts.joined()
+    }
+
+    /// Symbol for a single modifier.
+    static func symbol(for flag: NSEvent.ModifierFlags) -> String {
+        symbols(for: flag)
     }
 
     private var keyName: String {
@@ -154,5 +186,21 @@ struct KeyboardShortcutModel: Codable, Equatable, Sendable {
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: key)
         }
+    }
+}
+
+// MARK: - Codable
+
+/// Custom decoding keeps shortcuts saved before double-tap support loading:
+/// they have no `isDoubleTap` key and must read as chords. Lives in an
+/// extension so the memberwise initializer survives.
+extension KeyboardShortcutModel {
+    private enum CodingKeys: String, CodingKey { case keyCode, modifiers, isDoubleTap }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        keyCode = try c.decode(UInt16.self, forKey: .keyCode)
+        modifiers = try c.decode(UInt.self, forKey: .modifiers)
+        isDoubleTap = try c.decodeIfPresent(Bool.self, forKey: .isDoubleTap) ?? false
     }
 }
