@@ -3,6 +3,37 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.9.2</title>
+            <pubDate>Thu, 03 Sep 2026 12:31:13 +0000</pubDate>
+            <sparkle:version>265</sparkle:version>
+            <sparkle:shortVersionString>0.9.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[
+## Fixed
+
+- **Custom shortcut recorder stuck on "Press shortcut…" on macOS Sequoia** — the recorder only took keyboard focus if it was already attached to the popover window at the moment it asked, and on Sequoia that attach happens later. It now claims focus the moment it lands in the window, on every macOS version
+- Recording a shortcut that overlapped a popover shortcut (⌘C, ⌘⌫, ⌘, or ⌘Q) fired the popover action instead — ⌘Q quit the app mid-recording. While the recorder is armed it now receives every key
+- Recording the same keys for dictation and annotation is rejected with an "Already in use" hint instead of silently double-binding
+- Closing the popover with the shortcut recorder still armed left your global shortcuts dead until relaunch
+- Relay's Info.plist and update feed now declare macOS 15 as the minimum system version, so older Macs get a clear message instead of a crash on launch
+
+## Also fixed
+
+- Mic volume is restored to the device it was saved from, and always restored on quit
+- Quitting stops the MCP bridge cleanly, and MCP start/stop tools refuse instead of firing blind when the bridge is down; the bridge no longer resurrects files after a stop
+- Engine start failures are surfaced in the popover rather than leaving a dead placeholder; the stop completion is always delivered
+- Clipboard dedupe compares against the last non-voice item; content is classified after truncation
+- Overlay drags no longer trigger the stop tap; the snap-home zone is fixed; Reduce Motion is honored
+- The warm-capture pre-roll ring is cleared on capture restarts, and a failed warm start is retried once
+- Ref markers survive wildcard dictionary rules; punctuation is repaired after replacements; markdown code fences in captures are escaped correctly
+- Unreadable screenshot folders are reported instead of failing silently
+- New **Clear history** action, launch-at-login error reporting, and a Files-access banner
+- A pending correction check is cancelled when learning is turned off
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.9.2/Relay-v0.9.2.zip" length="8547789" type="application/octet-stream" sparkle:edSignature="IUR3WdTKyBWu+E1mx8bn0uYfn21IxcsQxW7CIYo0oUgQ3QCJrk5PgvEGJDjTFnhDTsZQbHhk/4hUPzK+tdDzDg=="/>
+        </item>
+        <item>
             <title>0.9.1</title>
             <pubDate>Tue, 25 Aug 2026 08:49:13 +0000</pubDate>
             <sparkle:version>244</sparkle:version>
