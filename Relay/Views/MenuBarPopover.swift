@@ -72,6 +72,9 @@ private struct MainPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
     @State private var pinnedToBottom = true
+    /// The engine error the banner already showed and timed out; a repeat of
+    /// the same message stays hidden until a different error arrives.
+    @State private var dismissedEngineError: String?
     @State private var canScrollUp = false
     @State private var canScrollDown = false
 
@@ -157,11 +160,17 @@ private struct MainPage: View {
             )
             .padding(.top, appState.isRecording ? 16 : 2)
             .padding(.bottom, hasContent || appState.showCopiedConfirmation || showProcessingIndicator ? 0 : 16)
+            .onChange(of: appState.isRecording) { _, recording in
+                // A new session gets a fresh banner even if it fails the same way.
+                if recording { dismissedEngineError = nil }
+            }
 
             // A failed session (denied microphone, missing model) sets an
-            // error the user otherwise never sees — show it until the next
-            // session start clears it.
-            if let engineError = appState.voiceManager.error, !appState.isRecording {
+            // error the user otherwise never sees. Show it briefly — it
+            // shouldn't sit in the popover until the next session start.
+            if let engineError = appState.voiceManager.error,
+               engineError != dismissedEngineError,
+               !appState.isRecording {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11))
@@ -176,6 +185,12 @@ private struct MainPage: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .transition(.opacity)
+                .task(id: engineError) {
+                    try? await Task.sleep(for: .seconds(8))
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        dismissedEngineError = engineError
+                    }
+                }
             }
 
             // Show a processing indicator for engines that buffer audio before transcribing
