@@ -11,9 +11,6 @@ struct ShortcutCaptureView: NSViewRepresentable {
         let view = ShortcutCaptureNSView()
         view.onCapture = onCapture
         view.onCancel = onCancel
-        DispatchQueue.main.async {
-            view.window?.makeFirstResponder(view)
-        }
         return view
     }
 
@@ -25,6 +22,17 @@ final class ShortcutCaptureNSView: NSView {
     var onCancel: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
+
+    /// Claim first responder the moment we land in a window. SwiftUI gives no
+    /// guarantee about when it attaches the NSView to its window relative to
+    /// makeNSView (on Sequoia it happened *after* a deferred main-queue block
+    /// had already run against a nil window, leaving the recorder unfocused
+    /// and stuck on "Press shortcut..."). Hooking the attach itself works for
+    /// every ordering.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
