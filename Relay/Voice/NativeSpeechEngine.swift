@@ -101,10 +101,11 @@ final class NativeSpeechEngine: SpeechEngine, @unchecked Sendable {
             }
             if let error, self.completionContinuation != nil {
                 let current = self.transcription.withLock { $0 }
-                if current.isEmpty {
-                    self.completionContinuation?.resume(throwing: SpeechEngineError.transcriptionFailed(error.localizedDescription))
-                } else {
-                    self.completionContinuation?.resume(returning: current)
+                switch RecognitionOutcome.resolve(transcript: current, error: error) {
+                case .text(let text):
+                    self.completionContinuation?.resume(returning: text)
+                case .failed(let message):
+                    self.completionContinuation?.resume(throwing: SpeechEngineError.transcriptionFailed(message))
                 }
                 self.completionContinuation = nil
             }
