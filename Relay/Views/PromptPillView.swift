@@ -3,7 +3,7 @@ import SwiftUI
 struct PromptPillView: View {
     let isRecording: Bool
     let audioLevel: Float
-    let shortcutDisplay: String
+    let shortcut: KeyboardShortcutModel
     var onStart: () -> Void
     var onStop: () -> Void
 
@@ -12,7 +12,7 @@ struct PromptPillView: View {
     var body: some View {
         ZStack {
             // Idle label
-            Text("Press \(shortcutDisplay) to start recording")
+            Text("\(shortcut.startPrompt) to start recording")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.45))
                 .scaleEffect(isRecording ? 0.5 : 1)

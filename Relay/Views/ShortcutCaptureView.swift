@@ -20,8 +20,17 @@ struct ShortcutCaptureView: NSViewRepresentable {
 final class ShortcutCaptureNSView: NSView {
     var onCapture: ((KeyboardShortcutModel) -> Void)?
     var onCancel: (() -> Void)?
+    /// Unrestricted: whichever modifier gets double-tapped becomes the shortcut.
+    private var doubleTap = ModifierDoubleTapDetector()
 
     override var acceptsFirstResponder: Bool { true }
+
+    /// A modifier tapped twice on its own records a double-tap shortcut.
+    override func flagsChanged(with event: NSEvent) {
+        if let modifier = doubleTap.flagsChanged(event.modifierFlags, at: event.timestamp) {
+            onCapture?(.doubleTap(modifier))
+        }
+    }
 
     /// Claim first responder the moment we land in a window. SwiftUI gives no
     /// guarantee about when it attaches the NSView to its window relative to
@@ -35,6 +44,7 @@ final class ShortcutCaptureNSView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        doubleTap.keyDown()
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
         // Escape cancels

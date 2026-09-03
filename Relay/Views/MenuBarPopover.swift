@@ -151,7 +151,7 @@ private struct MainPage: View {
             PromptPillView(
                 isRecording: appState.isRecording,
                 audioLevel: appState.voiceManager.audioLevel,
-                shortcutDisplay: appState.dictationShortcut.displayString,
+                shortcut: appState.dictationShortcut,
                 onStart: { appState.hotkeyTriggered() },
                 onStop: { appState.finishDictationAndStop() }
             )

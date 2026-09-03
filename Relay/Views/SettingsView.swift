@@ -849,6 +849,7 @@ private struct ShortcutRecorderButton: View {
             }
             .font(.caption.monospaced())
             .controlSize(.small)
+            .help("Press a key combination, or double-tap a modifier key such as \u{2318}")
         }
         .animation(.easeInOut(duration: 0.2), value: isDefault)
         .background {

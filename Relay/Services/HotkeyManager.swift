@@ -82,6 +82,12 @@ final class HotkeyManager {
     private var didRedirectToAccessibilitySettings = false
     private(set) var currentShortcut: KeyboardShortcutModel
     private(set) var currentAnnotateShortcut: KeyboardShortcutModel
+    /// Double-tap shortcuts can't go through Carbon; these watch flagsChanged instead.
+    private var dictationDoubleTap: ModifierDoubleTapMonitor?
+    private var annotateDoubleTap: ModifierDoubleTapMonitor?
+    /// False during init so a launch with Accessibility denied only shows the
+    /// settings banner; a user-initiated shortcut change may open System Settings.
+    private var didFinishLaunch = false
 
     init(appState: AppState) {
         self.appState = appState
@@ -96,6 +102,7 @@ final class HotkeyManager {
         installLocalMonitor()
         installAnnotateLocalMonitor()
         requestAccessibilityForGlobalMonitors()
+        didFinishLaunch = true
     }
 
     // MARK: - Shortcut management
@@ -175,6 +182,15 @@ final class HotkeyManager {
     /// Safe to call unconditionally — re-registers if already registered.
     private func registerCarbonHotKey() {
         unregisterCarbonHotKey()
+        if let modifier = currentShortcut.doubleTapModifier {
+            let monitor = ModifierDoubleTapMonitor(modifier: modifier) { [weak self] in
+                self?.appState?.hotkeyTriggered()
+            }
+            dictationDoubleTap = monitor
+            detectAccessibilityBrokenIfNeeded(globalMonitor: monitor.start(), redirectIfDenied: didFinishLaunch)
+            hotkeyLog.notice("Double-tap monitor installed for dictation")
+            return
+        }
         let carbonMods = carbonModifiers(from: currentShortcut.modifierFlags)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
@@ -196,11 +212,22 @@ final class HotkeyManager {
     private func unregisterCarbonHotKey() {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         hotKeyRef = nil
+        dictationDoubleTap?.stop()
+        dictationDoubleTap = nil
     }
 
     /// Registers the standalone annotation Carbon hotkey. Does not require accessibility.
     private func registerAnnotateHotKey() {
         unregisterAnnotateHotKey()
+        if let modifier = currentAnnotateShortcut.doubleTapModifier {
+            let monitor = ModifierDoubleTapMonitor(modifier: modifier) { [weak self] in
+                self?.appState?.annotateHotkeyTriggered()
+            }
+            annotateDoubleTap = monitor
+            detectAccessibilityBrokenIfNeeded(globalMonitor: monitor.start(), redirectIfDenied: didFinishLaunch)
+            hotkeyLog.notice("Double-tap monitor installed for annotation")
+            return
+        }
         let carbonMods = carbonModifiers(from: currentAnnotateShortcut.modifierFlags)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
@@ -222,6 +249,8 @@ final class HotkeyManager {
     private func unregisterAnnotateHotKey() {
         if let annotateHotKeyRef { UnregisterEventHotKey(annotateHotKeyRef) }
         annotateHotKeyRef = nil
+        annotateDoubleTap?.stop()
+        annotateDoubleTap = nil
     }
 
     func updateAnnotateShortcut(_ shortcut: KeyboardShortcutModel) {
@@ -235,6 +264,7 @@ final class HotkeyManager {
 
     private func installAnnotateLocalMonitor() {
         removeAnnotateLocalMonitor()
+        guard !currentAnnotateShortcut.isDoubleTap else { return }
         let keyCode = currentAnnotateShortcut.keyCode
         let modifierFlags = currentAnnotateShortcut.modifierFlags
         annotateLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -259,6 +289,7 @@ final class HotkeyManager {
     /// Local monitors do not require accessibility.
     private func installLocalMonitor() {
         removeLocalMonitor()
+        guard !currentShortcut.isDoubleTap else { return }
         let keyCode = currentShortcut.keyCode
         let modifierFlags = currentShortcut.modifierFlags
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -367,6 +398,27 @@ final class HotkeyManager {
     func startKeyUpMonitor(onKeyUp: @escaping @MainActor () -> Void) {
         stopKeyUpMonitor()
 
+        // Double-tap shortcut: "release" is the modifier lifting after the
+        // second press, which arrives as flagsChanged rather than keyUp.
+        if let modifier = currentShortcut.doubleTapModifier {
+            let released: (NSEvent) -> Bool = { event in
+                !event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(modifier)
+            }
+            globalKeyUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
+                if released(event) {
+                    MainActor.assumeIsolated { onKeyUp() }
+                }
+            }
+            localKeyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+                if released(event) {
+                    MainActor.assumeIsolated { onKeyUp() }
+                }
+                return event
+            }
+            detectAccessibilityBrokenIfNeeded(globalMonitor: globalKeyUpMonitor)
+            return
+        }
+
         let keyCode = currentShortcut.keyCode
 
         globalKeyUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyUp) { event in
@@ -393,13 +445,13 @@ final class HotkeyManager {
     /// If a global NSEvent monitor returned nil despite AXIsProcessTrusted() being true,
     /// the TCC entry is stale — the binary hash changed after a Sparkle update.
     /// Surfaces the broken state so the UI can warn the user.
-    private func detectAccessibilityBrokenIfNeeded(globalMonitor: Any?) {
+    private func detectAccessibilityBrokenIfNeeded(globalMonitor: Any?, redirectIfDenied: Bool = true) {
         if !AXIsProcessTrusted() {
             appState?.accessibilityNotGranted = true
             // Not granted yet — open System Settings so user can grant it.
             // Only do this once per app session to avoid a loop when the TCC cache
             // is stale after a sleep/wake cycle.
-            if !didRedirectToAccessibilitySettings {
+            if redirectIfDenied && !didRedirectToAccessibilitySettings {
                 didRedirectToAccessibilitySettings = true
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
                     NSWorkspace.shared.open(url)
@@ -435,18 +487,21 @@ final class HotkeyManager {
         let keyCode = currentAnnotateShortcut.keyCode
         let requiredMods = currentAnnotateShortcut.modifierFlags
 
-        // Base-key release (keyUp).
-        annotateGlobalKeyUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyUp) { event in
-            if event.keyCode == keyCode {
-                MainActor.assumeIsolated { onRelease() }
+        // Base-key release (keyUp). A double-tap has no base key — its
+        // release is the modifier lifting, caught by the flags monitors below.
+        if !currentAnnotateShortcut.isDoubleTap {
+            annotateGlobalKeyUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyUp) { event in
+                if event.keyCode == keyCode {
+                    MainActor.assumeIsolated { onRelease() }
+                }
             }
-        }
-        annotateLocalKeyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { event in
-            if event.keyCode == keyCode {
-                MainActor.assumeIsolated { onRelease() }
-                return nil
+            annotateLocalKeyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { event in
+                if event.keyCode == keyCode {
+                    MainActor.assumeIsolated { onRelease() }
+                    return nil
+                }
+                return event
             }
-            return event
         }
 
         // Modifier release (flagsChanged): if the held modifiers are no longer
@@ -463,7 +518,7 @@ final class HotkeyManager {
         let l = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { modHandler($0); return $0 }
         annotateFlagsMonitors = [g, l].compactMap { $0 }
 
-        detectAccessibilityBrokenIfNeeded(globalMonitor: annotateGlobalKeyUpMonitor)
+        detectAccessibilityBrokenIfNeeded(globalMonitor: currentAnnotateShortcut.isDoubleTap ? g : annotateGlobalKeyUpMonitor)
     }
 
     func stopAnnotateKeyUpMonitor() {
@@ -494,5 +549,63 @@ final class HotkeyManager {
         if let annotateGlobalKeyUpMonitor { NSEvent.removeMonitor(annotateGlobalKeyUpMonitor) }
         if let annotateLocalKeyUpMonitor { NSEvent.removeMonitor(annotateLocalKeyUpMonitor) }
         for m in annotateFlagsMonitors { NSEvent.removeMonitor(m) }
+    }
+}
+
+// MARK: - Double-tap monitor
+
+/// Owns the NSEvent monitors that feed a `ModifierDoubleTapDetector` for one
+/// configured shortcut: global monitors for the rest of the system (these need
+/// Accessibility, like push-to-talk's key-up monitor) and local ones for when
+/// Relay itself is frontmost. Ordinary key presses reset the detector so a
+/// chord like ⌘C followed by a ⌘ tap isn't mistaken for ⌘ ⌘.
+@MainActor
+final class ModifierDoubleTapMonitor {
+    private var detector: ModifierDoubleTapDetector
+    private let onDoubleTap: @MainActor () -> Void
+    private nonisolated(unsafe) var monitors: [Any] = []
+
+    init(modifier: NSEvent.ModifierFlags, onDoubleTap: @escaping @MainActor () -> Void) {
+        self.detector = ModifierDoubleTapDetector(modifier: modifier)
+        self.onDoubleTap = onDoubleTap
+    }
+
+    /// Installs the monitors. Returns the global flagsChanged monitor — nil
+    /// when Accessibility is denied — so the caller can surface the banner.
+    @discardableResult
+    func start() -> Any? {
+        stop()
+        let globalFlags = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            MainActor.assumeIsolated { self?.flagsChanged(event) }
+        }
+        let globalKeys = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] _ in
+            MainActor.assumeIsolated { self?.detector.keyDown() }
+        }
+        let localFlags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            MainActor.assumeIsolated { self?.flagsChanged(event) }
+            return event
+        }
+        let localKeys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            MainActor.assumeIsolated { self?.detector.keyDown() }
+            return event
+        }
+        monitors = [globalFlags, globalKeys, localFlags, localKeys].compactMap { $0 }
+        return globalFlags
+    }
+
+    func stop() {
+        for monitor in monitors { NSEvent.removeMonitor(monitor) }
+        monitors = []
+        detector.reset()
+    }
+
+    private func flagsChanged(_ event: NSEvent) {
+        if detector.flagsChanged(event.modifierFlags, at: event.timestamp) != nil {
+            onDoubleTap()
+        }
+    }
+
+    deinit {
+        for monitor in monitors { NSEvent.removeMonitor(monitor) }
     }
 }
