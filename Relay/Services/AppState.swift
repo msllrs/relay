@@ -175,6 +175,11 @@ final class AppState: ObservableObject {
     /// True while a shortcut recorder is capturing — the popover's own key
     /// shortcuts step aside so the keystroke reaches the recorder.
     @Published var shortcutRecorderArmed = false
+    /// The active dictation shortcut, mirrored from HotkeyManager so views
+    /// re-render when it changes. The popover's idle pill used to seed a
+    /// @State from disk once and never refresh, so a newly recorded shortcut
+    /// kept showing the old keys until the view happened to be rebuilt.
+    @Published var dictationShortcut: KeyboardShortcutModel = KeyboardShortcutModel.load()
     @Published var promptFormat: PromptFormat {
         didSet { UserDefaults.standard.set(promptFormat.rawValue, forKey: "promptFormat") }
     }

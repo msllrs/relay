@@ -71,7 +71,6 @@ private struct ScrollEdgeState: Equatable {
 private struct MainPage: View {
     @EnvironmentObject var appState: AppState
     @Binding var showSettings: Bool
-    @State private var shortcutDisplay = KeyboardShortcutModel.load().displayString
     @State private var pinnedToBottom = true
     @State private var canScrollUp = false
     @State private var canScrollDown = false
@@ -152,7 +151,7 @@ private struct MainPage: View {
             PromptPillView(
                 isRecording: appState.isRecording,
                 audioLevel: appState.voiceManager.audioLevel,
-                shortcutDisplay: shortcutDisplay,
+                shortcutDisplay: appState.dictationShortcut.displayString,
                 onStart: { appState.hotkeyTriggered() },
                 onStop: { appState.finishDictationAndStop() }
             )

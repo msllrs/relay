@@ -102,6 +102,7 @@ final class HotkeyManager {
 
     func updateShortcut(_ shortcut: KeyboardShortcutModel) {
         currentShortcut = shortcut
+        appState?.dictationShortcut = shortcut
         shortcut.save()
         if !isSuspended {
             registerCarbonHotKey()
