@@ -7,7 +7,7 @@
             <pubDate>Tue, 25 Aug 2026 08:49:13 +0000</pubDate>
             <sparkle:version>244</sparkle:version>
             <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## Fixed
 
@@ -21,7 +21,7 @@
             <pubDate>Thu, 06 Aug 2026 11:53:38 +0000</pubDate>
             <sparkle:version>237</sparkle:version>
             <sparkle:shortVersionString>0.9.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -39,7 +39,7 @@
             <pubDate>Mon, 03 Aug 2026 19:20:18 +0000</pubDate>
             <sparkle:version>229</sparkle:version>
             <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -58,7 +58,7 @@
             <pubDate>Wed, 29 Jul 2026 10:28:50 +0000</pubDate>
             <sparkle:version>223</sparkle:version>
             <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -93,7 +93,7 @@
             <pubDate>Sun, 27 Jul 2026 15:20:00 +0000</pubDate>
             <sparkle:version>183</sparkle:version>
             <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -117,7 +117,7 @@
             <pubDate>Fri, 24 Jul 2026 21:11:00 +0000</pubDate>
             <sparkle:version>169</sparkle:version>
             <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -138,7 +138,7 @@
             <pubDate>Wed, 08 Apr 2026 15:53:10 +0000</pubDate>
             <sparkle:version>126</sparkle:version>
             <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -156,7 +156,7 @@
             <pubDate>Fri, 20 Mar 2026 11:26:23 +0000</pubDate>
             <sparkle:version>124</sparkle:version>
             <sparkle:shortVersionString>0.3.4</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 
@@ -178,7 +178,7 @@
             <pubDate>Fri, 20 Mar 2026 11:26:34 +0000</pubDate>
             <sparkle:version>122</sparkle:version>
             <sparkle:shortVersionString>0.3.4</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <description sparkle:format="markdown"><![CDATA[## New
 

@@ -114,6 +114,8 @@ cat > "$APP_DIR/Info.plist" << PLIST
 	<string>APPL</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
