@@ -26,7 +26,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 - **Transcript cleanup** — Four modes for transcription output: Raw (verbatim), Clean (strips filler words like "um" and "basically"), Formatted (clean + capitalization, deduplication, punctuation), and AI Polish (Apple's on-device model resolves self-corrections and homophones — needs Apple Intelligence)
 - **Scratch That** — Opt-in: say "make the padding 20 pixels… no wait, 8 pixels" and the transcript just says 8 pixels. Understands cues like "scratch that", "I mean", "changed my mind", and "start over"; the corrected-away words are struck through live while you speak, then swept away. Fully on-device
 - **Custom dictionary** — Removal and replacement rules applied to every transcript (with live preview), plus vocabulary terms the speech engines are biased toward. Opt-in correction learning watches the field you pasted into and picks up words you fix by hand
-- **Global hotkeys** — Customizable keyboard shortcuts for recording and annotation
+- **Global hotkeys** — Customizable keyboard shortcuts for recording and annotation: any key combination, or a double-tapped modifier such as ⌘⌘
 - **Siri voice activation** — Opt-in `relay://` URL commands let Siri Shortcuts (or Raycast, scripts, anything that opens URLs) start and stop recording hands-free
 
 ## Annotations
