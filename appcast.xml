@@ -3,6 +3,25 @@
     <channel>
         <title>Relay</title>
         <item>
+            <title>0.10.0</title>
+            <pubDate>Fri, 04 Sep 2026 10:03:10 +0000</pubDate>
+            <sparkle:version>274</sparkle:version>
+            <sparkle:shortVersionString>0.10.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[
+## New
+
+- **Double-tap modifier shortcuts** — the dictation and annotation shortcuts can now be a single modifier tapped twice, like ⌘⌘ or ⌥⌥. Click the shortcut in Settings and double-tap the key to record it. The second tap has to land within a third of a second, ordinary keys in between reset it (so ⌘C then ⌘ never fires), and it still works for push-to-talk: double-tap, hold, release. Double-taps are detected with event monitors rather than a Carbon hotkey, so they need Accessibility access; Relay shows its existing banner if that's missing
+
+## Fixed
+
+- **"Transcription failed: No speech detected" lingering in the popover** — stopping a dictation without saying anything made Apple's recognizer report an error, which the new 0.9.2 banner then displayed until your next session. An empty session is now just an empty transcript, and any real engine error fades after eight seconds instead of sticking around
+- The popover's "Press … to start recording" label didn't update after recording a new shortcut on macOS Sequoia until the view happened to be rebuilt. It now follows the shortcut immediately
+]]></description>
+            <enclosure url="https://github.com/msllrs/relay/releases/download/v0.10.0/Relay-v0.10.0.zip" length="8561358" type="application/octet-stream" sparkle:edSignature="CmkapQ7JuIf6odPcnCAnh2lMhWZj2EKbfzzkHnT0vQHdIEbzDWX+DMwa5scBjB0FsiFo3zKorqkVRFDV5SEKBw=="/>
+        </item>
+        <item>
             <title>0.9.2</title>
             <pubDate>Thu, 03 Sep 2026 12:31:13 +0000</pubDate>
             <sparkle:version>265</sparkle:version>
