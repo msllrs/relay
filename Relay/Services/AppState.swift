@@ -267,6 +267,11 @@ final class AppState: ObservableObject {
     @Published var annotationAllowMultiple: Bool {
         didSet { UserDefaults.standard.set(annotationAllowMultiple, forKey: "annotationAllowMultiple") }
     }
+    /// Opt-in: saying a cue like "look at this" while recording captures the
+    /// window under the cursor, inline with the dictation.
+    @Published var captureOnSpokenCue: Bool {
+        didSet { UserDefaults.standard.set(captureOnSpokenCue, forKey: "captureOnSpokenCue") }
+    }
     /// Rolling history of the last 20 captures, newest first. In-memory only —
     /// clipboard contents can include secrets, so this is deliberately never
     /// persisted to disk.
@@ -389,6 +394,8 @@ final class AppState: ObservableObject {
         let timeOffset: TimeInterval
     }
     private var pendingRefs: [PendingRef] = []
+    /// Spoken "look at this" cues already acted on in the current session.
+    private var spokenCaptureCue = SpokenCaptureCue()
     private var recordingStartTime: Date?
     private var copiedConfirmationTask: Task<Void, Never>?
     private var clearAfterCopyTask: Task<Void, Never>?
@@ -487,6 +494,7 @@ final class AppState: ObservableObject {
         }
         self.annotationCaptureScope = CaptureScope(rawValue: UserDefaults.standard.string(forKey: "annotationCaptureScope") ?? "") ?? .crop
         self.annotationAllowMultiple = UserDefaults.standard.bool(forKey: "annotationAllowMultiple")
+        self.captureOnSpokenCue = UserDefaults.standard.bool(forKey: "captureOnSpokenCue")
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -583,7 +591,10 @@ final class AppState: ObservableObject {
 
         // Rebuild display transcription as partial results stream in
         voiceManager.$partialTranscription
-            .sink { [weak self] _ in self?.rebuildDisplayTranscription() }
+            .sink { [weak self] _ in
+                self?.rebuildDisplayTranscription()
+                self?.captureOnNewSpokenCue()
+            }
             .store(in: &cancellables)
 
         // Live self-correction strikethrough: rebuild when a strike hold
@@ -893,6 +904,7 @@ final class AppState: ObservableObject {
         }
         pendingRefs = []
         transcriptionTrimOffset = 0
+        spokenCaptureCue.reset()
         recordingStartTime = Date()
         sessionPeakLevel = 0
         silenceGate.reset()
@@ -1584,6 +1596,23 @@ final class AppState: ObservableObject {
         keyUp?.post(tap: .cgSessionEventTap)
     }
 
+    /// Capture the window under the cursor when the live transcript gains a
+    /// spoken cue ("look at this"). The capture lands as a ref at the moment
+    /// it's taken, right after the cue in the transcript.
+    private func captureOnNewSpokenCue() {
+        guard voiceManager.isRecording, captureOnSpokenCue, annotationEnabled else { return }
+        let full = voiceManager.partialTranscription
+        let session = full.count > transcriptionTrimOffset ? String(full.dropFirst(transcriptionTrimOffset)) : ""
+        // Several cues in one partial still describe the same cursor position,
+        // so they get one capture between them.
+        guard spokenCaptureCue.newCues(in: session) > 0,
+              annotationManager?.isSessionActive != true else { return }
+        annotationManager?.snapshotWindow(
+            at: NSEvent.mouseLocation,
+            label: "User pointed here while saying \"look\" — the ring marks the cursor."
+        )
+    }
+
     /// Record a reference marker for a clipboard item captured during dictation.
     func recordRefMarker(for itemID: UUID) {
         guard voiceManager.isRecording else { return }
@@ -1690,6 +1719,7 @@ final class AppState: ObservableObject {
         // If recording, add a fresh placeholder and skip already-transcribed text
         if voiceManager.isRecording {
             transcriptionTrimOffset = voiceManager.partialTranscription.count
+            spokenCaptureCue.reset()
             let placeholder = ClipboardItem(contentType: .voiceNote, textContent: "")
             activeVoiceNoteID = placeholder.id
             stack.add(placeholder)

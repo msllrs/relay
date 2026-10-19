@@ -343,6 +343,12 @@ struct SettingsPage: View {
 
                 SettingsToggle("Allow multiple annotations", isOn: $appState.annotationAllowMultiple)
 
+                SettingsToggle(
+                    "Capture when you say \u{201C}look at this\u{201D}",
+                    help: "While recording, saying \u{201C}look at this\u{201D}, \u{201C}look at that\u{201D}, \u{201C}look here\u{201D}, or \u{201C}check this out\u{201D} captures the window under the cursor, inline with your words.",
+                    isOn: $appState.captureOnSpokenCue
+                )
+
                 SettingsRow("Annotation shortcut") {
                     ShortcutRecorderButton(
                         initial: KeyboardShortcutModel.load(

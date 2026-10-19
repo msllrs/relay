@@ -195,7 +195,40 @@ final class AnnotationManager: ObservableObject {
             guard let self else { return }
             self.capture.invalidateCache()
             try? await Task.sleep(for: .milliseconds(80))
-            await self.captureAndStore(pixelRect: pixelRect, screen: screen, shape: shape, strokes: allStrokes)
+            await self.captureAndStore(pixelRect: pixelRect, screen: screen, intent: shape.intentLabel, strokes: allStrokes)
+        }
+    }
+
+    // MARK: - Point snapshots
+
+    /// Capture the window under `point` (AppKit global coordinates, e.g. a click
+    /// or the cursor) with a ring marking the point, and add it to the stack
+    /// with `label` as its intent. Used by click and spoken-cue captures, which
+    /// have no drawn marks to crop to. Falls back to the whole screen when
+    /// there's no app window under the point.
+    func snapshotWindow(at point: CGPoint, label: String) {
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) else { return }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+        let globalPoint = WindowLocator.globalPoint(fromAppKit: point, primaryHeight: primaryHeight)
+        let pixelRect = WindowLocator.topmostWindow(
+            at: globalPoint,
+            in: WindowLocator.onScreenWindows(),
+            excludingPID: ProcessInfo.processInfo.processIdentifier
+        ).flatMap {
+            WindowLocator.pixelRect(
+                forWindowBounds: $0.bounds,
+                screenFrame: screen.frame,
+                primaryHeight: primaryHeight,
+                scale: screen.backingScaleFactor
+            )
+        } ?? ScreenCaptureService.fullScreenPixelRect(screen)
+        let local = CGPoint(x: point.x - screen.frame.minX, y: point.y - screen.frame.minY)
+        let ring = WindowLocator.ring(around: local)
+
+        Task { [weak self] in
+            guard let self else { return }
+            self.capture.invalidateCache()
+            await self.captureAndStore(pixelRect: pixelRect, screen: screen, intent: label, strokes: [ring])
         }
     }
 
@@ -223,7 +256,7 @@ final class AnnotationManager: ObservableObject {
         )
     }
 
-    private func captureAndStore(pixelRect: CGRect, screen: NSScreen, shape: AnnotationShape, strokes: [[CGPoint]]) async {
+    private func captureAndStore(pixelRect: CGRect, screen: NSScreen, intent: String, strokes: [[CGPoint]]) async {
         do {
             let full = try await capture.captureFullScreen(of: screen)
             // Capture succeeded — clear any stale "needs permission" banner that
@@ -235,7 +268,7 @@ final class AnnotationManager: ObservableObject {
             }
             appState?.addItem(ClipboardItem(
                 contentType: .annotation,
-                textContent: shape.intentLabel,
+                textContent: intent,
                 imagePath: path
             ))
         } catch {
