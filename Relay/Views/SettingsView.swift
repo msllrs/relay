@@ -349,6 +349,12 @@ struct SettingsPage: View {
                     isOn: $appState.captureOnSpokenCue
                 )
 
+                SettingsToggle(
+                    "Capture on click while recording",
+                    help: "Each click while recording captures the window you clicked in, with the click marked, inline with your words. Clicks within a second of each other share one capture.",
+                    isOn: $appState.captureOnClick
+                )
+
                 SettingsRow("Annotation shortcut") {
                     ShortcutRecorderButton(
                         initial: KeyboardShortcutModel.load(

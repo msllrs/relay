@@ -256,7 +256,10 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(siriActivationEnabled, forKey: "siriActivationEnabled") }
     }
     @Published var annotationEnabled: Bool {
-        didSet { UserDefaults.standard.set(annotationEnabled, forKey: "annotationEnabled") }
+        didSet {
+            UserDefaults.standard.set(annotationEnabled, forKey: "annotationEnabled")
+            updateClickCaptureMonitor()
+        }
     }
     @Published var annotateWhileRecording: Bool {
         didSet { UserDefaults.standard.set(annotateWhileRecording, forKey: "annotateWhileRecording") }
@@ -271,6 +274,14 @@ final class AppState: ObservableObject {
     /// window under the cursor, inline with the dictation.
     @Published var captureOnSpokenCue: Bool {
         didSet { UserDefaults.standard.set(captureOnSpokenCue, forKey: "captureOnSpokenCue") }
+    }
+    /// Opt-in: each click while recording captures the window clicked in, with
+    /// the click marked, inline with the dictation.
+    @Published var captureOnClick: Bool {
+        didSet {
+            UserDefaults.standard.set(captureOnClick, forKey: "captureOnClick")
+            updateClickCaptureMonitor()
+        }
     }
     /// Rolling history of the last 20 captures, newest first. In-memory only —
     /// clipboard contents can include secrets, so this is deliberately never
@@ -396,6 +407,13 @@ final class AppState: ObservableObject {
     private var pendingRefs: [PendingRef] = []
     /// Spoken "look at this" cues already acted on in the current session.
     private var spokenCaptureCue = SpokenCaptureCue()
+    /// Global left-click monitor, installed only while recording with click
+    /// capture on. Global monitors never see clicks in Relay's own windows.
+    private var clickCaptureMonitor: Any?
+    private var lastClickCapture: Date?
+    /// Clicks closer together than this share one capture, so a double-click
+    /// or a burst of clicking doesn't flood the 20-item stack.
+    private let clickCaptureMinInterval: TimeInterval = 1.0
     private var recordingStartTime: Date?
     private var copiedConfirmationTask: Task<Void, Never>?
     private var clearAfterCopyTask: Task<Void, Never>?
@@ -495,6 +513,7 @@ final class AppState: ObservableObject {
         self.annotationCaptureScope = CaptureScope(rawValue: UserDefaults.standard.string(forKey: "annotationCaptureScope") ?? "") ?? .crop
         self.annotationAllowMultiple = UserDefaults.standard.bool(forKey: "annotationAllowMultiple")
         self.captureOnSpokenCue = UserDefaults.standard.bool(forKey: "captureOnSpokenCue")
+        self.captureOnClick = UserDefaults.standard.bool(forKey: "captureOnClick")
         let storedDeviceID = UInt32(UserDefaults.standard.integer(forKey: "selectedInputDeviceID"))
         // Reset to system default if the stored device is no longer available
         if storedDeviceID != 0 && !AudioDeviceManager.inputDevices().contains(where: { $0.id == storedDeviceID }) {
@@ -608,6 +627,15 @@ final class AppState: ObservableObject {
             .removeDuplicates()
             .filter { $0 }
             .sink { [weak self] _ in self?.liveCorrectionAnimator.reset() }
+            .store(in: &cancellables)
+
+        // Click capture listens only while recording.
+        voiceManager.$isRecording
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                // @Published fires before the value lands; read it next turn.
+                DispatchQueue.main.async { self?.updateClickCaptureMonitor() }
+            }
             .store(in: &cancellables)
 
         // Stop Esc/keyUp monitors when recording ends
@@ -1610,6 +1638,35 @@ final class AppState: ObservableObject {
         annotationManager?.snapshotWindow(
             at: NSEvent.mouseLocation,
             label: "User pointed here while saying \"look\" — the ring marks the cursor."
+        )
+    }
+
+    /// Install or remove the global click monitor to match the setting and
+    /// recording state.
+    private func updateClickCaptureMonitor() {
+        let wanted = captureOnClick && annotationEnabled && voiceManager.isRecording
+        if wanted, clickCaptureMonitor == nil {
+            lastClickCapture = nil
+            clickCaptureMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
+                // Read the location now: by the time the capture runs the
+                // pointer may have moved on.
+                let location = NSEvent.mouseLocation
+                MainActor.assumeIsolated { self?.captureClick(at: location) }
+            }
+        } else if !wanted, let monitor = clickCaptureMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickCaptureMonitor = nil
+        }
+    }
+
+    private func captureClick(at location: CGPoint) {
+        guard voiceManager.isRecording, annotationManager?.isSessionActive != true else { return }
+        let now = Date()
+        if let last = lastClickCapture, now.timeIntervalSince(last) < clickCaptureMinInterval { return }
+        lastClickCapture = now
+        annotationManager?.snapshotWindow(
+            at: location,
+            label: "User clicked here while dictating — the ring marks the click."
         )
     }
 
