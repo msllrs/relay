@@ -4,12 +4,14 @@ import Combine
 /// What region a finished annotation captures.
 enum CaptureScope: String, CaseIterable, Identifiable {
     case crop        // crop to the drawn marks (per-shape padding)
+    case window      // the app window drawn on, with the marks burned in
     case fullScreen  // the entire display, with the marks burned in
 
     var id: String { rawValue }
     var label: String {
         switch self {
         case .crop: "Crop to mark"
+        case .window: "Window"
         case .fullScreen: "Full screen"
         }
     }
@@ -174,8 +176,12 @@ final class AnnotationManager: ObservableObject {
             // The whole display, in pixels.
             pixelRect = ScreenCaptureService.fullScreenPixelRect(screen)
         case .crop:
-            let bbox = ShapeClassifier.unionBoundingBox(allStrokes)
-            pixelRect = ScreenCaptureService.toPixelRect(shape.paddedRect(bbox), screen: screen)
+            pixelRect = Self.markPixelRect(shape: shape, strokes: allStrokes, screen: screen)
+        case .window:
+            // The window holding most of the mark; drawing on the bare desktop
+            // falls back to cropping to the mark.
+            pixelRect = Self.windowPixelRect(forStrokes: allStrokes, screen: screen)
+                ?? Self.markPixelRect(shape: shape, strokes: allStrokes, screen: screen)
         }
 
         // Dismiss the overlay (and its rendered strokes) before capturing so the
@@ -191,6 +197,30 @@ final class AnnotationManager: ObservableObject {
             try? await Task.sleep(for: .milliseconds(80))
             await self.captureAndStore(pixelRect: pixelRect, screen: screen, shape: shape, strokes: allStrokes)
         }
+    }
+
+    private static func markPixelRect(shape: AnnotationShape, strokes: [[CGPoint]], screen: NSScreen) -> CGRect {
+        let bbox = ShapeClassifier.unionBoundingBox(strokes)
+        return ScreenCaptureService.toPixelRect(shape.paddedRect(bbox), screen: screen)
+    }
+
+    /// Pixel rect of the window under `strokes` (screen-local points) on `screen`.
+    private static func windowPixelRect(forStrokes strokes: [[CGPoint]], screen: NSScreen) -> CGRect? {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+        let points = strokes.joined().map {
+            WindowLocator.globalPoint(fromScreenLocal: $0, screenFrame: screen.frame, primaryHeight: primaryHeight)
+        }
+        guard let window = WindowLocator.window(
+            forStrokes: points,
+            in: WindowLocator.onScreenWindows(),
+            excludingPID: ProcessInfo.processInfo.processIdentifier
+        ) else { return nil }
+        return WindowLocator.pixelRect(
+            forWindowBounds: window.bounds,
+            screenFrame: screen.frame,
+            primaryHeight: primaryHeight,
+            scale: screen.backingScaleFactor
+        )
     }
 
     private func captureAndStore(pixelRect: CGRect, screen: NSScreen, shape: AnnotationShape, strokes: [[CGPoint]]) async {
