@@ -13,7 +13,7 @@ As you dictate, clipboard captures are woven inline with your transcription, lan
 ## Features
 
 - **Clipboard capture** — Automatically collects what you copy with content type detection (code, URL, terminal, JSON, text)
-- **Screen annotations** — Hold a shortcut and draw directly on your screen. Relay recognizes the gesture — circle, X, arrow, or highlight — captures the marked region, and attaches the intent ("focus here", "remove this", "points to this") so the LLM knows what you meant. Draw mid-dictation and the annotation lands inline with your words; committed marks melt away in a puff of smoke
+- **Screen annotations** — Hold a shortcut and draw directly on your screen. Relay recognizes the gesture — circle, X, arrow, or highlight — captures the marked region (or the whole window it's on), and attaches the intent ("focus here", "remove this", "points to this") so the LLM knows what you meant. Draw mid-dictation and the annotation lands inline with your words; committed marks melt away in a puff of smoke
 - **Screenshots, files, and folders** — Drag and drop images, files, or entire folders to add them as context
 - **Voice notes** — Record and transcribe with native macOS speech recognition, Apple's new SpeechAnalyzer (macOS 26), WhisperKit, or Parakeet; pick a specific input device or follow the system default, with seamless mid-recording handoff when devices connect or disconnect. Optional auto-stop after a stretch of silence
 - **Recording overlay** — A draggable floating indicator that springs out of the menu bar, shows live audio levels, flashes on new clipboard captures, and doubles as a stop button
@@ -40,7 +40,14 @@ Hold the annotation shortcut (default `⌘⇧A`) and draw on your screen; releas
 | Arrow | Points to this — a direction, move, or relationship |
 | Anything else | Highlighted region |
 
-Multi-stroke gestures work naturally — an arrow drawn as shaft-then-head, an X as two lines — and capture can crop to the mark or grab the full screen (Settings → Annotation). With "Annotate while recording" on, marks land inline with your dictation as you speak. Annotations require the Screen Recording permission.
+Multi-stroke gestures work naturally — an arrow drawn as shaft-then-head, an X as two lines — and capture can crop to the mark, crop to the window you drew on, or grab the full screen (Settings → Annotation). With "Annotate while recording" on, marks land inline with your dictation as you speak. Annotations require the Screen Recording permission.
+
+Two opt-in ways to capture without drawing, both while recording (Settings → Annotation):
+
+- **Spoken cue**: say "look at this", "look at that", "look here", or "check this out", and Relay captures the window under the cursor, marked with a ring, right after those words.
+- **Click capture**: each click captures the window you clicked in, with the click marked. Clicks within a second of each other share one capture.
+
+Windows are found the same way for all three, so drawing on or clicking in the iPhone Mirroring window gives a clean shot of just the phone.
 
 ## Claude Code integration
 
