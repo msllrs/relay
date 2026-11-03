@@ -32,12 +32,18 @@ final class EventTap {
         CGEvent.tapEnable(tap: port, enable: true)
     }
 
-    /// Stop delivering events. Safe to call more than once.
+    /// Stop delivering events and release the tap from the window server,
+    /// which otherwise keeps it registered (disabled) for the life of the
+    /// process. Safe to call more than once.
     func stop() {
-        if let source {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
-            self.source = nil
-        }
+        guard let source else { return }
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        self.source = nil
         CGEvent.tapEnable(tap: port, enable: false)
+        CFMachPortInvalidate(port)
+    }
+
+    deinit {
+        stop()
     }
 }
