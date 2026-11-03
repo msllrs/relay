@@ -1111,6 +1111,7 @@ final class AppState: ObservableObject {
         hotkeyManager?.stopKeyUpMonitor()
         // The world changed under any pending finalize from an older session.
         dictationGeneration += 1
+        saveCancelledSessionToHistory()
         pendingRefs = []
         recordingStartTime = nil
         // Restore display to frozen text (discard current session only)
@@ -1126,6 +1127,20 @@ final class AppState: ObservableObject {
         if !alwaysOnMonitoring {
             stopMonitoring()
         }
+    }
+
+    /// Keep what was said before an Esc cancel in capture history, so an Esc
+    /// meant for another app doesn't lose a long dictation. Uses the live
+    /// partial text: the engine's final pass never runs for a cancel.
+    private func saveCancelledSessionToHistory() {
+        guard voiceManager.isRecording, let start = recordingStartTime else { return }
+        let full = voiceManager.partialTranscription
+        let session = full.count > transcriptionTrimOffset ? String(full.dropFirst(transcriptionTrimOffset)) : ""
+        guard let text = CancelledDictationPolicy.textToKeep(
+            transcript: session,
+            elapsed: Date().timeIntervalSince(start)
+        ) else { return }
+        recordInHistory(ClipboardItem(contentType: .voiceNote, textContent: text))
     }
 
     /// Session ID of the most recent clipboard write, for restore ownership checks.
