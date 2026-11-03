@@ -45,7 +45,16 @@ else
 fi
 
 echo "Building Relay v${VERSION} (build ${BUILD_NUMBER}) [${CONFIG}] id=${BUNDLE_ID}..."
-swift build -c "$CONFIG"
+# Stamp the real SDK into LC_BUILD_VERSION. SwiftPM's Swift Build backend
+# (Xcode 27) links with --sysroot but no -isysroot or SDKROOT, so clang can't
+# read SDKSettings.json and stamps the deployment target as the SDK — AppKit
+# then applies old linked-on-or-before behaviors (the settings popover stopped
+# resizing). ld keeps the last -platform_version, so this is a no-op where the
+# stamp is already right.
+MACOS_MIN=$(swift package dump-package | plutil -extract platforms.0.version raw -o - -)
+MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+swift build -c "$CONFIG" \
+    -Xlinker -platform_version -Xlinker macos -Xlinker "$MACOS_MIN" -Xlinker "$MACOS_SDK"
 
 # Debug bundles used to be named Relay.app — remove strays so `open` and
 # LaunchServices can't resolve to a stale copy.

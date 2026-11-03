@@ -15,6 +15,8 @@ open .build/Relay.app
 
 **Important:** Always use `build-app.sh` when testing voice features. The bare `swift build` binary lacks the Info.plist and codesigning needed for microphone access on macOS. Without the `.app` bundle, `AVAudioEngine` silently receives zeroed audio buffers.
 
+**SDK stamp:** With Xcode 27, bare `swift build` stamps the deployment target (15.0) as the binary's SDK version, and AppKit then falls back to old compatibility behaviors (e.g. the settings popover not resizing). `build-app.sh` passes `-Xlinker -platform_version` with the real SDK from `xcrun` to fix this.
+
 ## Architecture
 
 ### Core
