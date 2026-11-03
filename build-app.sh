@@ -77,6 +77,9 @@ cp ".build/${CONFIG}/Relay" "$APP_DIR/MacOS/Relay"
 # <app>/Contents/MacOS/relay-mcp-server.
 cp ".build/${CONFIG}/relay-mcp-server" "$APP_DIR/MacOS/relay-mcp-server"
 
+# Fail before signing if either binary carries the wrong SDK stamp.
+Scripts/check-sdk-stamp.sh "$APP_DIR/MacOS/Relay" "$APP_DIR/MacOS/relay-mcp-server"
+
 # Copy every SwiftPM resource bundle (Relay's own plus dependencies') into
 # Contents/Resources — library targets resolve Bundle.module via
 # Bundle.main.resourceURL, so a missing bundle crashes at first resource access.
