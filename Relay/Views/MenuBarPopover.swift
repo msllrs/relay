@@ -240,17 +240,12 @@ private struct MainPage: View {
                             proxy.scrollTo("transcription-bottom", anchor: .bottom)
                         }
                     }
-                    .mask {
-                        VStack(spacing: 0) {
-                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                                .frame(height: canScrollUp ? 24 : 0)
-                            Rectangle().fill(.black)
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                                .frame(height: canScrollDown ? 24 : 0)
-                        }
-                        .animation(.easeOut(duration: 0.12), value: canScrollUp)
-                        .animation(.easeOut(duration: 0.12), value: canScrollDown)
-                    }
+                    .progressiveEdgeBlur(
+                        top: canScrollUp,
+                        bottom: canScrollDown,
+                        topHeight: 24,
+                        bottomHeight: 24
+                    )
                 }
                 .padding(.top, 16)
                 .scrollBounceBehavior(.basedOnSize)

@@ -89,24 +89,7 @@ struct SettingsPage: View {
                 canScrollUp = edges.canScrollUp
                 canScrollDown = edges.canScrollDown
             }
-            // Tall, soft edge fades. A true progressive BLUR here is not
-            // achievable with public APIs — every approach fails inside an
-            // NSPopover with AppKit-backed controls: SwiftUI Material samples
-            // behind the window, NSVisualEffectView can't backdrop-sample
-            // SwiftUI siblings, .blur()/.clipped() don't apply to platform
-            // views (compositor corruption), and cacheDisplay snapshots break
-            // the popover's vibrancy. Verified 2026-07-20; don't retry.
-            .mask {
-                VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: canScrollUp ? 36 : 0)
-                    Rectangle().fill(.black)
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: canScrollDown ? 36 : 0)
-                }
-                .animation(.easeOut(duration: 0.12), value: canScrollUp)
-                .animation(.easeOut(duration: 0.12), value: canScrollDown)
-            }
+            .progressiveEdgeBlur(top: canScrollUp, bottom: canScrollDown)
             .scrollBounceBehavior(.basedOnSize)
             .frame(maxHeight: maxScrollHeight)
             .fixedSize(horizontal: false, vertical: true)
